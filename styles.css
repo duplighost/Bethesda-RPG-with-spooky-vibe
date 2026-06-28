@@ -142,6 +142,53 @@ button:hover{background:rgba(255,122,24,.22);box-shadow:0 0 26px rgba(255,122,24
 #map-inner h2{font-size:26px;letter-spacing:8px;color:var(--pumpkin);margin-bottom:14px}
 #map-canvas{border:1px solid rgba(255,122,24,.35);background:#0b0d12;box-shadow:0 0 40px #000;image-rendering:auto}
 
+/* ---------- purse / companion ---------- */
+#purse{position:absolute;right:24px;bottom:96px;text-align:right;text-shadow:0 1px 4px #000}
+#coin{font-size:14px;color:#e8c46a;letter-spacing:1px}
+#companion-status{font-size:13px;color:#9fd0ff;margin-top:3px}
+
+/* ---------- diegetic fade ---------- */
+#fade{position:fixed;inset:0;z-index:60;background:#000;opacity:0;pointer-events:none;
+  display:flex;align-items:center;justify-content:center;transition:opacity .9s}
+#fade.on{opacity:1}
+#fade-text{color:#7a6a8a;font-style:italic;font-size:20px;letter-spacing:2px;text-align:center;
+  opacity:0;transition:opacity .9s}
+#fade.on #fade-text{opacity:.9}
+
+/* ---------- dialogue ---------- */
+#dialogue{position:fixed;left:0;right:0;bottom:0;z-index:55;display:flex;justify-content:center;
+  padding:0 0 5vh;pointer-events:none}
+#dialogue-box{pointer-events:auto;width:min(760px,92vw);background:var(--panel);
+  border:1px solid rgba(255,122,24,.4);border-radius:6px;padding:22px 26px;
+  box-shadow:0 20px 60px #000,inset 0 0 40px rgba(40,20,60,.4);backdrop-filter:blur(3px)}
+#dialogue-speaker{color:var(--pumpkin);font-size:15px;letter-spacing:3px;font-variant:small-caps;margin-bottom:8px}
+#dialogue-text{color:var(--bone);font-size:17px;line-height:1.55;font-style:italic;margin-bottom:16px}
+#dialogue-options{display:flex;flex-direction:column;gap:7px}
+.dlg-opt{pointer-events:auto;cursor:pointer;text-align:left;font-size:15px;letter-spacing:.5px;
+  color:#cfc6b4;background:rgba(255,255,255,.03);border:1px solid rgba(232,226,208,.18);
+  border-radius:4px;padding:9px 14px;transition:.12s;font-family:inherit}
+.dlg-opt:hover{background:rgba(255,122,24,.16);border-color:var(--pumpkin);color:#fff}
+.dlg-opt .chk{color:#8dff6a;font-size:13px;letter-spacing:1px}
+.dlg-opt .chk.hard{color:#ff8a5a}
+.dlg-opt .chk.fail{color:#b6202a}
+.dlg-opt.leave{color:#8a96a8}
+
+/* ---------- shop ---------- */
+#shop-inner{width:min(620px,92vw);background:var(--panel);border:1px solid rgba(255,122,24,.4);
+  border-radius:6px;padding:28px 32px;box-shadow:0 20px 60px #000}
+#shop-inner h2{font-size:24px;letter-spacing:6px;color:var(--pumpkin);text-align:center}
+#shop-coin{text-align:center;color:#e8c46a;margin:6px 0 18px;letter-spacing:1px}
+#shop-items{display:flex;flex-direction:column;gap:8px}
+.shop-item{display:flex;justify-content:space-between;align-items:center;gap:14px;
+  padding:11px 16px;border:1px solid rgba(232,226,208,.16);border-radius:4px;
+  background:rgba(255,255,255,.03)}
+.shop-item .info b{color:var(--bone);font-size:15px}
+.shop-item .info small{display:block;color:var(--fog);font-size:12px;margin-top:2px}
+.shop-buy{cursor:pointer;font-family:inherit;font-size:13px;letter-spacing:1px;color:#e8c46a;
+  background:rgba(232,196,106,.08);border:1px solid #e8c46a;border-radius:4px;padding:7px 14px;transition:.12s;pointer-events:auto}
+.shop-buy:hover{background:rgba(232,196,106,.22);color:#fff}
+.shop-buy:disabled{opacity:.35;cursor:not-allowed}
+
 #loading{position:fixed;inset:0;z-index:90;display:flex;flex-direction:column;align-items:center;
   justify-content:center;background:#05060a;color:var(--fog);font-size:18px;letter-spacing:3px}
 #loading-sub{font-size:12px;margin-top:14px;color:#445;letter-spacing:1px}

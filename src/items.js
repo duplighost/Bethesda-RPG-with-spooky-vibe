@@ -105,7 +105,8 @@ export class Items {
       new THREE.MeshStandardMaterial({ color: 0xd8c89a, emissive: 0x4a3c1c, emissiveIntensity: 0.4, side: THREE.DoubleSide })
     );
     paper.rotation.x = -Math.PI / 2.2; grp.add(paper);
-    const glow = new THREE.PointLight(0xffd070, 0.5, 4, 2); glow.position.y = 0.4; grp.add(glow);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.world._glowTex, color: 0xffd070, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+    glow.scale.setScalar(1.4); glow.position.y = 0.5; grp.add(glow);
     this.world.placeOnGround(grp, n.x + 1.5, n.z + 1.5, 0.9);
     this.scene.add(grp);
     this.interactables.push({
@@ -121,7 +122,8 @@ export class Items {
       new THREE.MeshStandardMaterial({ color: l.icon, emissive: l.icon, emissiveIntensity: 0.5, metalness: 0.4, roughness: 0.4 })
     );
     mesh.position.y = 0.2; grp.add(mesh);
-    const glow = new THREE.PointLight(l.icon, 0.8, 5, 2); glow.position.y = 0.3; grp.add(glow);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.world._glowTex, color: l.icon, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }));
+    glow.scale.setScalar(1.6); glow.position.y = 0.35; grp.add(glow);
     this.world.placeOnGround(grp, l.x, l.z, 1.0);
     this.scene.add(grp);
     this.interactables.push({
@@ -130,7 +132,7 @@ export class Items {
     });
   }
 
-  // returns the nearest usable interactable in range (for the HUD prompt)
+  // returns the nearest usable interactable in range as {pos, prompt, run}
   nearest() {
     if (this.reading) return null;
     const p = this.player.pos;
@@ -140,7 +142,12 @@ export class Items {
       const d = dist2D(p.x, p.z, it.pos.x, it.pos.z);
       if (d < it.radius && d < bestD) { bestD = d; best = it; }
     }
-    return best;
+    if (!best) return null;
+    return {
+      pos: best.pos,
+      prompt: best.kind === 'note' ? `read · ${best.data.title}` : `take · ${best.data.title}`,
+      run: () => this.interact(best),
+    };
   }
 
   interact(it) {

@@ -51,9 +51,10 @@ capture the mouse (pointer-lock); press **ESC** to release it.
 | **Q** | **Lantern Flare** — AoE stun, reveals ghosts, relieves Dread |
 | **1 / 2** | Select arm: Revolver / Hexbolt |
 | **R** | Reload |
-| **E** | Interact — read notes, take loot |
+| **E** | Interact — read notes, take loot, **talk to NPCs**, enter buildings |
+| **K / L** | Save / Load (also auto-saves) |
 | **TAB** | County map |
-| **ESC** | Release cursor |
+| **ESC** | Release cursor / back out of menus |
 
 ---
 
@@ -88,6 +89,32 @@ capture the mouse (pointer-lock); press **ESC** to release it.
 - **Fully procedural audio** — wind, a Dread-reactive drone, gunshots, bells, ghost
   hiss and the boss roar, all synthesised at runtime via the Web Audio API.
 
+### …and the expanded systems
+
+- **Talkable NPCs with branching, stat-checked dialogue** — Deputy Holloway (county
+  gossip + a Presence check to get deputized) and Mara Vale (a Lantern Warden you
+  can recruit). Options gate on `[Presence]`, `[Hex]`, `[Monster Lore]`, etc.
+- **A Mask Market vendor + soulgilt currency** — enemies drop soulgilt; spend it on
+  healing, a permanent revolver-capacity mod, or stat shards.
+- **A recruitable companion** — Mara Vale follows you and guns down the things you miss.
+- **Enterable interior dungeons with a diegetic load-fade** — cross a threshold, the
+  screen fades to black with a whisper, and you wake inside:
+  - **The Bellweather House** — the thirteenth-chair tableau made real, guarded by a
+    *Grief Wraith* mini-boss that drops **The Mourning Key**.
+  - **Old Mother Grin's Hut** — a social boss: bargain for forbidden Harvestcraft,
+    let her feed you, or draw on her and fight through the kitchen.
+- **Handcrafted dynamic world events** — the Crying Bride asking directions to a
+  church that burned sixty years ago, the Whispering Sack that knows your name, and
+  a scarecrow that creeps closer every time you look away.
+- **A new enemy** — the **Moonbitten** werebeast prowls Mournwood; brutal, fast, weak
+  to silver.
+- **Save / load** to `localStorage` (K / L, plus autosave) — because the loop may
+  repeat, but your progress shouldn't.
+
+> **Performance note:** rather than a real light per pumpkin (200+ would crush a
+> forward renderer), every glow is a free emissive sprite and a fixed pool of ~10
+> real point-lights is distance-culled to the nearest glow points each frame.
+
 ---
 
 ## 🧭 First objectives
@@ -113,6 +140,11 @@ Plain ES modules, no bundler. Each system is one file under `src/`:
 | `enemies.js` | Bestiary, AI state machines, Marrow Jack boss |
 | `items.js` | Interactables, notes, loot |
 | `quests.js` | Main-quest objective chain |
+| `dialogue.js` | Branching dialogue runner with stat checks |
+| `npc.js` | Talkable NPCs, vendor + currency, companion |
+| `interiors.js` | Interior dungeons + diegetic load-fade |
+| `events.js` | Handcrafted dynamic world encounters |
+| `save.js` | localStorage save/load |
 | `audio.js` | Procedural Web Audio engine |
 | `utils.js` | Seeded RNG + shared helpers |
 | `vendor/three.module.js` | Vendored Three.js r161 (so there's no CDN dependency) |
@@ -125,10 +157,12 @@ fitting for a county stuck in The Long October.
 ## 🔭 Scope & honest notes
 
 This is a **vertical slice / prototype**, not the 200-hour game from the design doc.
-It implements the core pillars end-to-end — open world, gun+magic gameplay, AI
-enemies, a boss, environmental storytelling, RPG/Dread systems — at a scale one
-developer can ship in a single project. The full design (13 Harvest Bells, six
-faction questlines, megadungeon interiors, companions, crafting, the five endings)
-lives in the design brief; the code here is the foundation you'd grow it from.
+It now implements the core pillars *and* a second tier — open world, gun+magic
+gameplay, AI enemies + a giant boss, environmental storytelling, RPG/Dread systems,
+branching dialogue, NPCs + a vendor economy, a companion, enterable interiors with
+diegetic loading, dynamic world events, and save/load — at a scale one developer can
+ship in a single project. The rest of the design (all 13 Harvest Bells and the five
+endings, six full faction questlines, the megadungeon interiors, deep crafting) lives
+in the brief; the code here is the foundation you'd grow it from.
 
 Built with Three.js (MIT). Everything else is original and self-contained.

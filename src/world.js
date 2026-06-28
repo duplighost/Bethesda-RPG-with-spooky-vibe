@@ -21,10 +21,48 @@ export class World {
     this.rng = makeRng(seed);
     this.colliders = [];          // {minX,maxX,minZ,maxZ} blocking boxes
     this.interactables = [];      // populated by items.js
-    this.lights = [];             // flickering point lights (jack-o-lanterns)
+    this.glows = [];              // {pos,color,base,phase,drift} candidate light sources
+    this.lightPool = [];          // fixed pool of real PointLights (distance-culled)
+    this.POOL = 10;
     this.scarecrowProps = [];     // static scarecrows that "watch" you
     this.WORLD = 900;             // half-extent of the playable county
     this._t = 0;
+    this._glowTex = this._makeGlowTexture();
+  }
+
+  // soft radial sprite so every pumpkin reads as a glow without a real light
+  _makeGlowTexture() {
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d');
+    const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grd.addColorStop(0, 'rgba(255,255,255,1)');
+    grd.addColorStop(0.3, 'rgba(255,200,120,0.7)');
+    grd.addColorStop(1, 'rgba(255,140,40,0)');
+    g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
+    const t = new THREE.CanvasTexture(c); return t;
+  }
+
+  // register a cheap glow: emissive sprite halo + candidacy for the light pool
+  _addGlow(x, y, z, color = 0xff7a1e, base = 1.0, opts = {}) {
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: this._glowTex, color, transparent: true, opacity: 0.5,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    spr.position.set(x, y, z);
+    spr.scale.setScalar(opts.size ?? 2.4);
+    this.scene.add(spr);
+    const glow = { pos: new THREE.Vector3(x, y, z), color: new THREE.Color(color), base,
+      phase: this.rng() * TAU, sprite: spr, drift: opts.drift || null };
+    this.glows.push(glow);
+    return glow;
+  }
+
+  _buildLightPool() {
+    for (let i = 0; i < this.POOL; i++) {
+      const L = new THREE.PointLight(0xff7a1e, 0, 16, 2);
+      this.scene.add(L);
+      this.lightPool.push(L);
+    }
   }
 
   // ---- Analytic rolling terrain. Cheap, continuous getHeight(). ----
@@ -63,6 +101,7 @@ export class World {
 
   build() {
     this._sky();
+    this._buildLightPool();
     this._terrain();
     this._water();
     this._gravewick();
@@ -218,11 +257,7 @@ export class World {
 
     this.placeOnGround(grp, x, z, 0.42 * scale);
     this.scene.add(grp);
-
-    const light = new THREE.PointLight(0xff7a1e, 1.1, 11 * scale, 2);
-    light.position.copy(grp.position); light.position.y += 0.2;
-    this.scene.add(light);
-    this.lights.push({ light, base: 1.1, phase: this.rng() * TAU });
+    this._addGlow(grp.position.x, grp.position.y + 0.2, grp.position.z, 0xff7a1e, 1.1 * scale, { size: 2.2 * scale });
     return grp;
   }
 
@@ -463,9 +498,7 @@ export class World {
     }
     // witch hut + green witchfire light
     this._house(reg.x, reg.z, 7, 7, 4.5, 0x20281c, 0.7);
-    const fire = new THREE.PointLight(0x6dff5a, 1.3, 16, 2);
-    this.placeOnGround(fire, reg.x + 5, reg.z + 4, 1.2); this.scene.add(fire);
-    this.lights.push({ light: fire, base: 1.3, phase: this.rng() * TAU });
+    this._addGlow(reg.x + 5, this.getHeight(reg.x + 5, reg.z + 4) + 1.2, reg.z + 4, 0x6dff5a, 1.4, { size: 3 });
     this._scarecrow(reg.x - 20, reg.z + 15, true);
   }
 
@@ -478,9 +511,7 @@ export class World {
       const stack = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.8, 16, 10),
         new THREE.MeshStandardMaterial({ color: 0x191512, roughness: 1 }));
       this.placeOnGround(stack, sx, sz, 8); this.scene.add(stack); this.addCollider(sx, sz, 1.8, 1.8);
-      const glow = new THREE.PointLight(0xff4a1e, 0.8, 14, 2);
-      this.placeOnGround(glow, sx, sz, 16); this.scene.add(glow);
-      this.lights.push({ light: glow, base: 0.8, phase: this.rng() * TAU });
+      this._addGlow(sx, this.getHeight(sx, sz) + 16, sz, 0xff4a1e, 0.9, { size: 4 });
     }
     // rusted machinery debris
     for (let i = 0; i < 18; i++) {
@@ -503,10 +534,8 @@ export class World {
     for (let i = 0; i < 14; i++) {
       const a = this.rng() * TAU, r = Math.sqrt(this.rng()) * reg.r * 0.8;
       const x = reg.x + Math.cos(a) * r, z = reg.z + Math.sin(a) * r;
-      const wisp = new THREE.PointLight(0x8dff6a, 0.7, 9, 2);
-      this.placeOnGround(wisp, x, z, randRange(this.rng, 1.5, 3));
-      this.scene.add(wisp);
-      this.lights.push({ light: wisp, base: 0.7, phase: this.rng() * TAU, drift: { x, z, a: this.rng() * TAU } });
+      const y = this.getHeight(x, z) + randRange(this.rng, 1.5, 3);
+      this._addGlow(x, y, z, 0x8dff6a, 0.8, { size: 2.2, drift: { x, z, a: this.rng() * TAU } });
     }
   }
 
@@ -556,16 +585,7 @@ export class World {
   // ---------------- Per-frame ----------------
   update(dt, playerPos) {
     this._t += dt;
-    // jack-o-lantern flicker
-    for (const L of this.lights) {
-      const f = 0.75 + Math.sin(this._t * 9 + L.phase) * 0.12 + Math.sin(this._t * 23 + L.phase) * 0.08;
-      L.light.intensity = L.base * f;
-      if (L.drift) { // marsh wisps wander
-        L.drift.a += dt * 0.3;
-        L.light.position.x = L.drift.x + Math.cos(L.drift.a) * 4;
-        L.light.position.z = L.drift.z + Math.sin(L.drift.a) * 4;
-      }
-    }
+    this._updateLightPool(dt, playerPos);
     // drift leaf litter with the wind, recycling around the player
     if (this.leaves) {
       const p = this.leaves.geometry.attributes.position;
@@ -580,6 +600,54 @@ export class World {
     // the moon "blinks" rarely
     if (this.moon && Math.sin(this._t * 0.13) > 0.999) this.moon.scale.y = 0.05;
     else if (this.moon) this.moon.scale.y = 1;
+  }
+
+  // Assign the fixed light pool to the nearest glow points, so cost stays
+  // constant no matter how many pumpkins dot the county.
+  _updateLightPool(dt, playerPos) {
+    const flick = (phase) => 0.78 + Math.sin(this._t * 9 + phase) * 0.12 + Math.sin(this._t * 23 + phase) * 0.08;
+    // animate drifting wisps + sprite shimmer
+    for (const g of this.glows) {
+      if (g.drift) {
+        g.drift.a += dt * 0.3;
+        g.pos.x = g.drift.x + Math.cos(g.drift.a) * 4;
+        g.pos.z = g.drift.z + Math.sin(g.drift.a) * 4;
+        g.sprite.position.copy(g.pos);
+      }
+      if (g.sprite) g.sprite.material.opacity = 0.4 * flick(g.phase) + 0.15;
+    }
+    // indoors: the overworld glows don't reach; let interior lights carry the room
+    if (playerPos && this._interiorMuted) { for (const L of this.lightPool) L.intensity = 0; return; }
+
+    // find nearest POOL glow points (simple partial selection, cheap enough)
+    const px = playerPos ? playerPos.x : 0, pz = playerPos ? playerPos.z : 0;
+    const cand = this.glows;
+    // compute squared distances and pick nearest POOL via a small insertion list
+    const best = this._poolScratch || (this._poolScratch = []);
+    best.length = 0;
+    for (let i = 0; i < cand.length; i++) {
+      const g = cand[i];
+      const dx = g.pos.x - px, dz = g.pos.z - pz;
+      const d2 = dx * dx + dz * dz;
+      if (d2 > 70 * 70) continue;
+      if (best.length < this.POOL) { best.push({ g, d2 }); best.sort((a, b) => a.d2 - b.d2); }
+      else if (d2 < best[this.POOL - 1].d2) { best[this.POOL - 1] = { g, d2 }; best.sort((a, b) => a.d2 - b.d2); }
+    }
+    for (let i = 0; i < this.POOL; i++) {
+      const L = this.lightPool[i];
+      if (i < best.length) {
+        const g = best[i].g;
+        L.position.copy(g.pos);
+        L.color.copy(g.color);
+        L.distance = 18;
+        L.intensity = g.base * flick(g.phase);
+      } else L.intensity = 0;
+    }
+  }
+
+  setInteriorMuted(v) {
+    this._interiorMuted = v;
+    for (const L of this.lightPool) L.visible = !v;   // drop them from the shader indoors
   }
 
   // resolve player XZ against box colliders (called from player.js)

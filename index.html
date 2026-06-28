@@ -55,6 +55,33 @@
     <div id="prompt"><span class="key">E</span> <span id="prompt-text">interact</span></div>
 
     <div id="compass"><div id="compass-needle">▲</div></div>
+
+    <div id="purse">
+      <div id="coin">◉ <span id="coin-n">0</span> soulgilt</div>
+      <div id="companion-status" class="hidden">☾ <span id="companion-name"></span> <span id="companion-hp"></span></div>
+    </div>
+  </div>
+
+  <!-- ============ DIEGETIC LOAD FADE ============ -->
+  <div id="fade"><div id="fade-text"></div></div>
+
+  <!-- ============ DIALOGUE ============ -->
+  <div id="dialogue" class="hidden">
+    <div id="dialogue-box">
+      <div id="dialogue-speaker">—</div>
+      <div id="dialogue-text"></div>
+      <div id="dialogue-options"></div>
+    </div>
+  </div>
+
+  <!-- ============ SHOP ============ -->
+  <div id="shop" class="overlay hidden">
+    <div id="shop-inner">
+      <h2 id="shop-title">THE MASK MARKET</h2>
+      <div id="shop-coin">◉ <span id="shop-coin-n">0</span> soulgilt</div>
+      <div id="shop-items"></div>
+      <div class="reader-foot">[ <span class="key">E</span> / <span class="key">ESC</span> to leave the stall ]</div>
+    </div>
   </div>
 
   <!-- ============ READER (notes / journals) ============ -->
@@ -76,7 +103,8 @@
       <div id="controls-hint" class="hidden">
         <b>WASD</b> move · <b>MOUSE</b> look · <b>SHIFT</b> sprint · <b>SPACE</b> jump<br/>
         <b>LMB</b> fire · <b>RMB</b> cast spell · <b>F</b> lantern · <b>Q</b> Lantern&nbsp;Flare<br/>
-        <b>1/2/3</b> select arm · <b>R</b> reload · <b>E</b> interact · <b>TAB</b> map · <b>ESC</b> release cursor
+        <b>1/2</b> revolver/hexbolt · <b>R</b> reload · <b>E</b> interact / talk · <b>TAB</b> map<br/>
+        <b>K</b> save · <b>L</b> load · <b>ESC</b> release cursor / back
       </div>
     </div>
   </div>

@@ -5,6 +5,20 @@
 import * as THREE from 'three';
 import { clamp, lerp, showToast, whisper } from './utils.js';
 
+// resolve a point against a list of AABB colliders (shared by interiors)
+export function collideBoxes(px, pz, radius, boxes) {
+  for (const c of boxes) {
+    if (px > c.minX - radius && px < c.maxX + radius && pz > c.minZ - radius && pz < c.maxZ + radius) {
+      const dl = px - (c.minX - radius), dr = (c.maxX + radius) - px;
+      const db = pz - (c.minZ - radius), dtp = (c.maxZ + radius) - pz;
+      const mx = Math.min(dl, dr), mz = Math.min(db, dtp);
+      if (mx < mz) px = dl < dr ? c.minX - radius : c.maxX + radius;
+      else pz = db < dtp ? c.minZ - radius : c.maxZ + radius;
+    }
+  }
+  return [px, pz];
+}
+
 export class Player {
   constructor(camera, world, audio) {
     this.camera = camera;
@@ -45,6 +59,8 @@ export class Player {
     // bob / sway
     this.bob = 0; this.recoilKick = 0;
 
+    this.flags = {};
+    this.coin = 0;
     this.dead = false;
     this._hurtT = 0;
     this._regenT = 0;
@@ -82,6 +98,7 @@ export class Player {
   }
   respawn() {
     this.dead = false;
+    this.interior = null;
     this.hp = this.maxHP; this.wisp = this.maxWisp;
     this.dread = Math.max(0, this.dread - 25);
     document.getElementById('death').classList.add('hidden');
@@ -143,11 +160,18 @@ export class Player {
     // integrate
     let nx = this.pos.x + this.vel.x * dt;
     let nz = this.pos.z + this.vel.z * dt;
-    [nx, nz] = this.world.collide(nx, nz, this.radius);
-    this.pos.x = clamp(nx, -this.world.WORLD + 4, this.world.WORLD - 4);
-    this.pos.z = clamp(nz, -this.world.WORLD + 4, this.world.WORLD - 4);
-
-    const groundY = this.world.getHeight(this.pos.x, this.pos.z) + this.height;
+    let groundY;
+    if (this.interior) {
+      [nx, nz] = collideBoxes(nx, nz, this.radius, this.interior.colliders);
+      this.pos.x = clamp(nx, this.interior.min.x, this.interior.max.x);
+      this.pos.z = clamp(nz, this.interior.min.z, this.interior.max.z);
+      groundY = this.interior.floorY + this.height;
+    } else {
+      [nx, nz] = this.world.collide(nx, nz, this.radius);
+      this.pos.x = clamp(nx, -this.world.WORLD + 4, this.world.WORLD - 4);
+      this.pos.z = clamp(nz, -this.world.WORLD + 4, this.world.WORLD - 4);
+      groundY = this.world.getHeight(this.pos.x, this.pos.z) + this.height;
+    }
     this.pos.y += this.vel.y * dt;
     if (this.pos.y <= groundY) { this.pos.y = groundY; this.vel.y = 0; this.onGround = true; }
 

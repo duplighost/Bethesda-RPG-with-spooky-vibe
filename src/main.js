@@ -10,6 +10,11 @@ import { Enemies } from './enemies.js';
 import { Items } from './items.js';
 import { Quests } from './quests.js';
 import { Audio } from './audio.js';
+import { Dialogue } from './dialogue.js';
+import { NPCs } from './npc.js';
+import { Interiors } from './interiors.js';
+import { Events } from './events.js';
+import { Save } from './save.js';
 import { clamp, dist2D, TAU } from './utils.js';
 
 // ---------- Renderer / Scene / Camera ----------
@@ -40,10 +45,45 @@ const quests = new Quests(world, player, audio);
 const enemies = new Enemies(scene, world, player, audio);
 const weapons = new Weapons(camera, scene, player, enemies, audio);
 const items = new Items(scene, world, player, audio, quests);
+const dialogue = new Dialogue(player);
+const npcs = new NPCs(scene, world, player, audio, dialogue, enemies, quests);
+const interiors = new Interiors(scene, world, player, enemies, audio, dialogue, npcs);
+const events = new Events(scene, world, player, audio, dialogue, enemies);
+const save = new Save(player, quests, npcs, weapons);
+
 player.weaponsRef = weapons;
 enemies.onBossDefeated = () => quests.onBossDefeated();
+save.onForceExitInterior = () => { if (interiors.active) { player.interior = null; interiors.active = null; enemies.suspended = false; scene.fog.density = 0.0065; } };
+
+// re-capture the mouse after any overlay closes
+function relock() { if (started && !uiBlocking() && document.pointerLockElement !== canvas) canvas.requestPointerLock(); }
+npcs.onDialogueOpen = () => {}; npcs.onDialogueClose = relock;
+events.onDialogueOpen = () => {}; events.onDialogueClose = relock;
+interiors.onReaderClose = relock; interiors.onReaderOpen = () => {};
 
 document.getElementById('loading').classList.add('hidden');
+
+// ---------- Interaction (unified across providers) ----------
+const providers = [items, npcs, interiors, events];
+function getNearest() {
+  let best = null, bd = Infinity;
+  for (const prov of providers) {
+    const n = prov.nearest(player.pos);
+    if (n) {
+      const d = dist2D(player.pos.x, player.pos.z, n.pos.x, n.pos.z);
+      if (d < bd) { bd = d; best = n; }
+    }
+  }
+  return best;
+}
+
+// ---------- UI state ----------
+const readerEl = document.getElementById('reader');
+const readerOpen = () => !readerEl.classList.contains('hidden');
+function closeReader() { readerEl.classList.add('hidden'); items.reading = false; relock(); }
+function uiBlocking() {
+  return paused || mapOpen || readerOpen() || dialogue.active || npcs.shopOpen || interiors._fading;
+}
 
 // ---------- Input ----------
 const input = { fwd: false, back: false, left: false, right: false, sprint: false, jump: false };
@@ -56,14 +96,20 @@ const keyMap = {
 
 addEventListener('keydown', (e) => {
   if (!started) return;
-  if (keyMap[e.code] !== undefined) { input[keyMap[e.code]] = true; }
+  if (keyMap[e.code] !== undefined) input[keyMap[e.code]] = true;
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') input.sprint = true;
   if (e.code === 'Space') { input.jump = true; e.preventDefault(); }
 
-  if (items.reading) {
-    if (e.code === 'KeyE' || e.code === 'Escape') items.closeReader();
-    return;
+  // overlay-dismiss keys
+  if (e.code === 'Escape') {
+    if (readerOpen()) return closeReader();
+    if (npcs.shopOpen) { npcs.closeShop(); return; }
+    if (dialogue.active) { dialogue.close(); return; }
+    if (mapOpen) { toggleMap(); return; }
   }
+  if (readerOpen()) { if (e.code === 'KeyE') closeReader(); return; }
+  if (npcs.shopOpen) { if (e.code === 'KeyE') { npcs.closeShop(); } return; }
+  if (dialogue.active) return;
 
   switch (e.code) {
     case 'KeyF': player.toggleLantern(); break;
@@ -71,7 +117,9 @@ addEventListener('keydown', (e) => {
     case 'KeyR': weapons.reload(); break;
     case 'Digit1': weapons.setMode('gun'); break;
     case 'Digit2': weapons.setMode('spell'); break;
-    case 'KeyE': items.interact(items.nearest()); break;
+    case 'KeyE': { const n = getNearest(); if (n) n.run(); break; }
+    case 'KeyK': save.save(true); break;
+    case 'KeyL': save.load(); break;
     case 'Tab': e.preventDefault(); toggleMap(); break;
   }
 });
@@ -83,15 +131,13 @@ addEventListener('keyup', (e) => {
 
 // Mouse
 addEventListener('mousemove', (e) => {
-  if (!started || paused || mapOpen || items.reading) return;
-  if (document.pointerLockElement === canvas) {
-    player.addLook(e.movementX, e.movementY);
-  }
+  if (!started || uiBlocking()) return;
+  if (document.pointerLockElement === canvas) player.addLook(e.movementX, e.movementY);
 });
 let lmb = false, rmb = false;
 canvas.addEventListener('mousedown', (e) => {
-  if (!started) return;
-  if (document.pointerLockElement !== canvas && !items.reading && !mapOpen) { canvas.requestPointerLock(); return; }
+  if (!started || uiBlocking()) return;
+  if (document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
   if (e.button === 0) { lmb = true; weapons.primary(); }
   if (e.button === 2) { rmb = true; weapons.secondary(); }
 });
@@ -109,32 +155,27 @@ function toggleMap() {
   mapOpen = !mapOpen;
   document.getElementById('map').classList.toggle('hidden', !mapOpen);
   if (mapOpen && document.pointerLockElement) document.exitPointerLock();
-  else if (!mapOpen) canvas.requestPointerLock();
+  else if (!mapOpen) relock();
 }
 function drawMap() {
   const W = mapCanvas.width, H = mapCanvas.height, scale = W / (world.WORLD * 2);
   mctx.fillStyle = '#0b0d12'; mctx.fillRect(0, 0, W, H);
   const toX = (x) => W / 2 + x * scale, toY = (z) => H / 2 + z * scale;
-  // regions
   for (const r of REGIONS) {
-    mctx.beginPath();
-    mctx.arc(toX(r.x), toY(r.z), r.r * scale, 0, TAU);
-    mctx.fillStyle = 'rgba(255,122,24,0.06)';
-    mctx.fill();
+    mctx.beginPath(); mctx.arc(toX(r.x), toY(r.z), r.r * scale, 0, TAU);
+    mctx.fillStyle = 'rgba(255,122,24,0.06)'; mctx.fill();
     mctx.strokeStyle = 'rgba(255,122,24,0.4)'; mctx.lineWidth = 1; mctx.stroke();
     mctx.fillStyle = '#9fb3c8'; mctx.font = '11px Georgia'; mctx.textAlign = 'center';
     mctx.fillText(r.name, toX(r.x), toY(r.z));
   }
-  // objective marker
-  const tgt = quests.objectiveTarget();
-  if (tgt) {
-    mctx.beginPath(); mctx.arc(toX(tgt.x), toY(tgt.z), 6, 0, TAU);
-    mctx.fillStyle = '#8dff6a'; mctx.fill();
+  // doors / interiors
+  for (const d of interiors.doors) {
+    mctx.fillStyle = '#e8c46a'; mctx.fillRect(toX(d.x) - 3, toY(d.z) - 3, 6, 6);
   }
-  // player
+  const tgt = quests.objectiveTarget();
+  if (tgt) { mctx.beginPath(); mctx.arc(toX(tgt.x), toY(tgt.z), 6, 0, TAU); mctx.fillStyle = '#8dff6a'; mctx.fill(); }
   mctx.save();
-  mctx.translate(toX(player.pos.x), toY(player.pos.z));
-  mctx.rotate(-player.yaw);
+  mctx.translate(toX(player.pos.x), toY(player.pos.z)); mctx.rotate(-player.yaw);
   mctx.fillStyle = '#ff7a18'; mctx.beginPath();
   mctx.moveTo(0, -7); mctx.lineTo(5, 6); mctx.lineTo(-5, 6); mctx.closePath(); mctx.fill();
   mctx.restore();
@@ -144,67 +185,51 @@ function drawMap() {
 const compassNeedle = document.getElementById('compass-needle');
 function updateCompass() {
   const marks = [['N', 0], ['E', Math.PI / 2], ['S', Math.PI], ['W', -Math.PI / 2]];
-  // build heading string positioned by yaw; plus objective marker ◈
-  let html = '';
-  const center = 120; // px
-  const span = 240 / Math.PI; // px per radian within ~half view
-  function rel(angle) {
-    let d = angle - player.yaw;
-    while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU;
-    return d;
-  }
+  const center = 120, span = 240 / Math.PI;
+  const rel = (angle) => { let d = angle - player.yaw; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; };
   const items2 = marks.map(([l, a]) => ({ l, x: center + rel(a) * span }));
   const tgt = quests.objectiveTarget();
-  if (tgt) {
+  if (tgt && !player.interior) {
     const ang = Math.atan2(tgt.x - player.pos.x, tgt.z - player.pos.z);
     items2.push({ l: '◈', x: center + rel(ang) * span });
   }
-  // render via positioned spans
-  compassNeedle.innerHTML = items2
-    .filter(m => m.x > -10 && m.x < 250)
-    .map(m => `<span style="position:absolute;left:${m.x}px;transform:translateX(-50%);${m.l==='◈'?'color:#8dff6a':''}">${m.l}</span>`)
-    .join('');
-  compassNeedle.style.position = 'relative';
-  compassNeedle.style.height = '20px';
-  compassNeedle.style.display = 'block';
+  compassNeedle.innerHTML = items2.filter(m => m.x > -10 && m.x < 250)
+    .map(m => `<span style="position:absolute;left:${m.x}px;transform:translateX(-50%);${m.l === '◈' ? 'color:#8dff6a' : ''}">${m.l}</span>`).join('');
+  compassNeedle.style.position = 'relative'; compassNeedle.style.height = '20px'; compassNeedle.style.display = 'block';
 }
 
 // ---------- HUD ----------
-let clockMin = 11 * 60 + 54; // 11:54 PM
+let clockMin = 11 * 60 + 54;
 function updateHUD(dt) {
   document.getElementById('health-fill').style.width = `${clamp(player.hp / player.maxHP, 0, 1) * 100}%`;
   document.getElementById('wisp-fill').style.width = `${clamp(player.wisp / player.maxWisp, 0, 1) * 100}%`;
   document.getElementById('dread-fill').style.width = `${player.dread}%`;
 
-  const reg = world.regionAt(player.pos.x, player.pos.z);
-  const rn = document.getElementById('region-name');
-  if (rn.textContent !== reg.name) {
-    rn.textContent = reg.name;
-    audio.setRegionWind(reg.wind);
-    scene.fog.color.setHex(reg.fog);
+  if (!player.interior) {
+    const reg = world.regionAt(player.pos.x, player.pos.z);
+    const rn = document.getElementById('region-name');
+    if (rn.textContent !== reg.name) {
+      rn.textContent = reg.name;
+      audio.setRegionWind(reg.wind);
+      scene.fog.color.setHex(reg.fog);
+    }
   }
   audio.setDread(player.dread01());
 
-  // clock crawls toward midnight but Hallow's Eve never quite arrives
   clockMin += dt * 0.2;
   let hr = Math.floor(clockMin / 60) % 24, mn = Math.floor(clockMin % 60);
   const ampm = hr >= 12 ? 'PM' : 'AM'; let h12 = hr % 12; if (h12 === 0) h12 = 12;
-  document.getElementById('clock').textContent =
-    `${h12}:${String(mn).padStart(2, '0')} ${ampm} · Hallow's Eve`;
+  document.getElementById('clock').textContent = `${h12}:${String(mn).padStart(2, '0')} ${ampm} · Hallow's Eve`;
 
-  // interaction prompt
-  const near = items.nearest();
+  const near = uiBlocking() ? null : getNearest();
   const prompt = document.getElementById('prompt');
-  if (near) {
-    prompt.classList.add('show');
-    document.getElementById('prompt-text').textContent =
-      near.kind === 'note' ? `read · ${near.data.title}` : `take · ${near.data.title}`;
-  } else prompt.classList.remove('show');
+  if (near) { prompt.classList.add('show'); document.getElementById('prompt-text').textContent = near.prompt; }
+  else prompt.classList.remove('show');
 
   updateCompass();
 }
 
-// ---------- Intro sequence ----------
+// ---------- Intro ----------
 const introLinesEl = document.getElementById('intro-lines');
 const INTRO = [
   'Dirt hitting wood.',
@@ -221,36 +246,42 @@ function runIntro() {
   let i = 0, buf = '';
   const tick = () => {
     if (i < INTRO.length) {
-      buf += (i ? '\n' : '') + INTRO[i];
-      introLinesEl.textContent = buf;
-      i++;
+      buf += (i ? '\n' : '') + INTRO[i]; introLinesEl.textContent = buf; i++;
       setTimeout(tick, 950);
     } else {
-      document.getElementById('title-card').classList.remove('hidden');
-      document.getElementById('title-sub').classList.remove('hidden');
-      document.getElementById('begin').classList.remove('hidden');
-      document.getElementById('controls-hint').classList.remove('hidden');
+      ['title-card', 'title-sub', 'begin', 'controls-hint'].forEach(id => document.getElementById(id).classList.remove('hidden'));
+      if (save.has()) {
+        const b = document.getElementById('begin');
+        const cont = document.createElement('button');
+        cont.textContent = 'CONTINUE LOOP'; cont.style.marginLeft = '14px';
+        cont.onclick = () => beginGame(true);
+        b.after(cont);
+      }
     }
   };
   tick();
 }
 runIntro();
 
-document.getElementById('begin').addEventListener('click', () => {
+function beginGame(loadSave) {
   audio.init();
   document.getElementById('intro').classList.add('hidden');
   document.getElementById('hud').classList.remove('hidden');
-  // wake at the funeral home, looking south into Gravewick
   player.spawnAt(world.funeralHome.x, world.funeralHome.z + 9, Math.PI);
   weapons.setMode('gun');
+  document.getElementById('coin-n').textContent = player.coin;
   started = true;
   quests.start();
+  if (loadSave) save.load();
   canvas.requestPointerLock();
-});
-
+}
+document.getElementById('begin').addEventListener('click', () => beginGame(false));
 document.getElementById('respawn').addEventListener('click', () => {
+  // if you died inside a haunt, the loop spits you back into the overworld
+  if (interiors.active) { interiors.active = null; enemies.suspended = false; scene.fog.density = 0.0065; world.setInteriorMuted(false); }
   player.respawn();
-  canvas.requestPointerLock();
+  scene.fog.color.setHex(world.regionAt(player.pos.x, player.pos.z).fog);
+  relock();
 });
 
 // ---------- Loop ----------
@@ -260,19 +291,21 @@ function loop() {
   const dt = Math.min(0.05, clock.getDelta());
   if (!started) { renderer.render(scene, camera); return; }
 
-  if (!paused && !mapOpen && !items.reading) {
-    // continuous fire while LMB held (revolver auto-paces via cooldown)
+  const blocked = uiBlocking();
+  if (!blocked) {
     if (lmb) weapons.primary();
     if (rmb) weapons.secondary();
     player.update(dt, input);
     weapons.update(dt);
     enemies.update(dt);
     items.update(dt);
+    npcs.update(dt);
+    events.update(dt);
     quests.update(dt);
     world.update(dt, player.pos);
+    save.update(dt);
   } else {
-    // still let the world breathe a little while paused so it isn't frozen-dead
-    world.update(dt * 0.2, player.pos);
+    world.update(dt * 0.15, player.pos);
   }
 
   updateHUD(dt);
@@ -281,5 +314,4 @@ function loop() {
 }
 loop();
 
-// expose for debugging in console
-window.HALLOWIND = { scene, world, player, enemies, weapons, quests };
+window.HALLOWIND = { scene, world, player, enemies, weapons, quests, npcs, interiors, events, save, dialogue };

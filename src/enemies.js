@@ -87,7 +87,8 @@ export class Enemies {
     const body = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.5, 6),
       new THREE.MeshStandardMaterial({ color: 0x2e3d18, roughness: 1 }));
     body.position.y = -0.4; body.rotation.x = Math.PI; g.add(body);
-    const light = new THREE.PointLight(0xff7a1e, 0.5, 4, 2); g.add(light);
+    const light = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.world._glowTex, color: 0xff7a1e, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
+    light.scale.setScalar(1.4); g.add(light);
 
     g.position.set(x, this.world.getHeight(x, z) + 0.9, z);
     return this._register({
@@ -118,6 +119,33 @@ export class Enemies {
       hp: 48, maxHp: 48, speed: 4.4, dmg: 12, atkCd: 0, atkRange: 2.6,
       state: 'hunt', stagger: 0, dead: false, dyingT: 0, phaseT: Math.random() * TAU,
       resist: { silver: 0.04, witchfire: 1.6 }, dread: 0.5, xp: 26, vulnerable: false,
+    });
+  }
+
+  spawnWerebeast(x, z) {
+    const g = new THREE.Group();
+    const fur = new THREE.MeshStandardMaterial({ color: 0x241a16, roughness: 1, flatShading: true });
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.45, 1.0, 4, 8), fur);
+    torso.rotation.z = Math.PI / 2.3; torso.position.y = 1.2; torso.castShadow = true; g.add(torso);
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.7, 7), fur);
+    head.rotation.x = Math.PI / 2; head.position.set(0, 1.4, 0.7); head.castShadow = true; g.add(head);
+    // human eyes
+    const em = new THREE.MeshBasicMaterial({ color: 0xfff2a0 });
+    const e1 = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), em); e1.position.set(-0.12, 1.5, 0.9); g.add(e1);
+    const e2 = e1.clone(); e2.position.x = 0.12; g.add(e2);
+    // legs
+    for (const sx of [-0.3, 0.3]) {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.06, 1.2, 6), fur);
+      leg.position.set(sx, 0.55, -0.2); g.add(leg);
+      const leg2 = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.06, 1.2, 6), fur);
+      leg2.position.set(sx, 0.55, 0.5); g.add(leg2);
+    }
+    g.position.set(x, this.world.getHeight(x, z), z);
+    return this._register({
+      type: 'werebeast', group: g, head,
+      hp: 120, maxHp: 120, speed: 9.4, dmg: 22, atkCd: 0, atkRange: 2.6,
+      state: 'hunt', stagger: 0, dead: false, dyingT: 0,
+      resist: { silver: 1.7, witchfire: 0.8 }, dread: 0.35, xp: 48,
     });
   }
 
@@ -228,6 +256,11 @@ export class Enemies {
     e.dead = true; e.dyingT = e.isBoss ? 2.4 : 0.6; e.state = 'die';
     this.kills++;
     this.player.addXP(e.xp);
+    if (e.onDeath) e.onDeath();
+    // drop soulgilt currency
+    const reward = Math.max(1, Math.round(e.xp * (e.isBoss ? 0.5 : 0.4)));
+    this.player.coin = (this.player.coin || 0) + reward;
+    const cn = document.getElementById('coin-n'); if (cn) cn.textContent = this.player.coin;
     if (e.isBoss) {
       this._hideBossBar();
       showToast('Marrow Jack falls. The field exhales.');
@@ -312,6 +345,7 @@ export class Enemies {
   }
 
   _ambientSpawn(dt) {
+    if (this.suspended) return;
     this.spawnCd -= dt;
     const alive = this.list.filter(e => !e.dead && !e.isBoss).length;
     if (this.spawnCd > 0 || alive >= this.maxAmbient) return;
@@ -324,9 +358,14 @@ export class Enemies {
     if (dist2D(x, z, 0, 0) < 30) return; // keep spawn town calmer at the well
 
     const roll = Math.random();
-    if (reg.id === 'gallowsfen' || reg.id === 'mournwood') {
-      if (roll < 0.5) this.spawnGhost(x, z);
-      else if (roll < 0.8) this.spawnScarecrow(x, z);
+    if (reg.id === 'mournwood') {
+      if (roll < 0.32) this.spawnGhost(x, z);
+      else if (roll < 0.55) this.spawnWerebeast(x, z);
+      else if (roll < 0.82) this.spawnScarecrow(x, z);
+      else this.spawnJackling(x, z);
+    } else if (reg.id === 'gallowsfen') {
+      if (roll < 0.55) this.spawnGhost(x, z);
+      else if (roll < 0.82) this.spawnScarecrow(x, z);
       else this.spawnJackling(x, z);
     } else if (reg.id === 'jackfield' || reg.id === 'thousand') {
       if (roll < 0.5) this.spawnScarecrow(x, z);
@@ -391,6 +430,11 @@ export class Enemies {
     else if (e.type === 'jackling') {
       const d = this._faceAndStep(e, dt, p, e.stagger > 0);
       e.group.position.y = gy + e.hover + Math.sin(performance.now() * 0.008 + e.id) * 0.18;
+      this._tryAttack(e, dt, p, d);
+    }
+    else if (e.type === 'werebeast') {
+      const d = this._faceAndStep(e, dt, p, e.stagger > 0);
+      e.group.position.y = gy + Math.abs(Math.sin(performance.now() * 0.012 + e.id)) * 0.12;
       this._tryAttack(e, dt, p, d);
     }
     else if (e.type === 'ghost') {
