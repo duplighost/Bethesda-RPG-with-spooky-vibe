@@ -28,6 +28,8 @@ export class Save {
       visited: [...this.quests.visited],
       companion: this.npcs.companion ? this.npcs.companion.name : null,
       inInterior: !!p.interior,
+      factions: this.factions ? this.factions.serialize() : null,
+      bells: this.bells ? this.bells.serialize() : null,
     };
     try {
       localStorage.setItem(KEY, JSON.stringify(data));
@@ -63,6 +65,8 @@ export class Save {
       const m = this.npcs.list.find(n => n.name === data.companion);
       if (m) this.npcs.recruit(m);
     }
+    if (this.factions && data.factions) this.factions.load(data.factions);
+    if (this.bells && data.bells) this.bells.load(data.bells);
     showToast('◈ You step back into a loop already in progress. (loaded)');
     return true;
   }

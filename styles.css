@@ -189,6 +189,32 @@ button:hover{background:rgba(255,122,24,.22);box-shadow:0 0 26px rgba(255,122,24
 .shop-buy:hover{background:rgba(232,196,106,.22);color:#fff}
 .shop-buy:disabled{opacity:.35;cursor:not-allowed}
 
+/* ---------- journal ---------- */
+#journal-inner{width:min(880px,94vw);max-height:88vh;overflow:auto;background:var(--panel);
+  border:1px solid rgba(255,122,24,.4);border-radius:6px;padding:26px 30px;box-shadow:0 20px 60px #000}
+#journal-inner h2{font-size:24px;letter-spacing:6px;color:var(--pumpkin);text-align:center;margin-bottom:18px}
+#journal-cols{display:flex;gap:30px}
+.jcol{flex:1}
+.jcol h3{font-size:13px;letter-spacing:3px;color:var(--pumpkin-soft);margin:16px 0 8px;border-bottom:1px solid rgba(255,122,24,.2);padding-bottom:4px}
+.jcol h3:first-child{margin-top:0}
+#j-objective{font-style:italic;color:var(--bone);font-size:15px;line-height:1.4}
+.j-row{display:flex;justify-content:space-between;font-size:13px;color:#cfc6b4;padding:3px 0;gap:10px}
+.j-row .v{color:var(--fog)}
+.j-bell{font-size:13px;padding:3px 0;color:#cfc6b4}
+.j-bell .d{color:var(--pumpkin-soft);font-size:11px;letter-spacing:1px}
+.j-bell.unresolved{color:#6a7080}
+.curse-track{height:12px;background:rgba(0,0,0,.5);border:1px solid rgba(180,80,200,.4);border-radius:2px;overflow:hidden;margin-top:4px}
+.curse-fill{height:100%;background:linear-gradient(90deg,#1d5e2a,#b14fd0,#ff3a10)}
+.fac-bar{height:8px;background:rgba(0,0,0,.5);border-radius:2px;overflow:hidden;margin-top:2px}
+.fac-fill{height:100%}
+
+/* ---------- ending ---------- */
+#ending{background:radial-gradient(circle at 50% 35%,rgba(30,10,40,.8),rgba(0,0,0,.99))}
+#ending-inner{max-width:720px;text-align:center;padding:30px}
+#ending-title{font-size:54px;letter-spacing:10px;color:var(--pumpkin);text-shadow:0 0 30px #ff7a18,0 0 70px #802500;margin-bottom:24px;animation:flick 3s infinite}
+#ending-body{font-size:18px;line-height:1.7;color:#cfc6b4;white-space:pre-wrap;text-align:left;margin-bottom:22px}
+#ending-stats{font-size:13px;color:var(--fog);letter-spacing:1px;margin-bottom:26px}
+
 #loading{position:fixed;inset:0;z-index:90;display:flex;flex-direction:column;align-items:center;
   justify-content:center;background:#05060a;color:var(--fog);font-size:18px;letter-spacing:3px}
 #loading-sub{font-size:12px;margin-top:14px;color:#445;letter-spacing:1px}

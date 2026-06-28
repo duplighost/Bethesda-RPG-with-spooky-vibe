@@ -15,7 +15,9 @@ import { NPCs } from './npc.js';
 import { Interiors } from './interiors.js';
 import { Events } from './events.js';
 import { Save } from './save.js';
-import { clamp, dist2D, TAU } from './utils.js';
+import { Factions, FACTIONS } from './factions.js';
+import { Bells, ENDINGS } from './bells.js';
+import { clamp, dist2D, TAU, showToast } from './utils.js';
 
 // ---------- Renderer / Scene / Camera ----------
 const canvas = document.getElementById('game');
@@ -46,25 +48,35 @@ const enemies = new Enemies(scene, world, player, audio);
 const weapons = new Weapons(camera, scene, player, enemies, audio);
 const items = new Items(scene, world, player, audio, quests);
 const dialogue = new Dialogue(player);
+const factions = new Factions(player);
 const npcs = new NPCs(scene, world, player, audio, dialogue, enemies, quests);
 const interiors = new Interiors(scene, world, player, enemies, audio, dialogue, npcs);
 const events = new Events(scene, world, player, audio, dialogue, enemies);
+const bells = new Bells(scene, world, player, audio, dialogue, factions, quests);
 const save = new Save(player, quests, npcs, weapons);
 
 player.weaponsRef = weapons;
-enemies.onBossDefeated = () => quests.onBossDefeated();
-save.onForceExitInterior = () => { if (interiors.active) { player.interior = null; interiors.active = null; enemies.suspended = false; scene.fog.density = 0.0065; } };
+enemies.factions = factions;
+npcs.factions = factions;
+quests.bellsRef = bells;
+save.factions = factions;
+save.bells = bells;
+enemies.onBossDefeated = () => { quests.onBossDefeated(); bells.onMarrowJack(); };
+enemies.onEngineDefeated = () => bells.setEngineDead();
+bells.onEnding = (ending) => showEnding(ending);
+save.onForceExitInterior = () => { if (interiors.active) { player.interior = null; interiors.active = null; enemies.suspended = false; scene.fog.density = 0.0065; world.setInteriorMuted(false); } };
 
 // re-capture the mouse after any overlay closes
 function relock() { if (started && !uiBlocking() && document.pointerLockElement !== canvas) canvas.requestPointerLock(); }
 npcs.onDialogueOpen = () => {}; npcs.onDialogueClose = relock;
 events.onDialogueOpen = () => {}; events.onDialogueClose = relock;
+bells.onDialogueOpen = () => {}; bells.onDialogueClose = relock;
 interiors.onReaderClose = relock; interiors.onReaderOpen = () => {};
 
 document.getElementById('loading').classList.add('hidden');
 
 // ---------- Interaction (unified across providers) ----------
-const providers = [items, npcs, interiors, events];
+const providers = [items, npcs, interiors, events, bells];
 function getNearest() {
   let best = null, bd = Infinity;
   for (const prov of providers) {
@@ -81,8 +93,12 @@ function getNearest() {
 const readerEl = document.getElementById('reader');
 const readerOpen = () => !readerEl.classList.contains('hidden');
 function closeReader() { readerEl.classList.add('hidden'); items.reading = false; relock(); }
+const journalEl = document.getElementById('journal');
+const endingEl = document.getElementById('ending');
+const journalOpen = () => !journalEl.classList.contains('hidden');
+const endingOpen = () => !endingEl.classList.contains('hidden');
 function uiBlocking() {
-  return paused || mapOpen || readerOpen() || dialogue.active || npcs.shopOpen || interiors._fading;
+  return paused || mapOpen || readerOpen() || dialogue.active || npcs.shopOpen || interiors._fading || journalOpen() || endingOpen();
 }
 
 // ---------- Input ----------
@@ -105,8 +121,11 @@ addEventListener('keydown', (e) => {
     if (readerOpen()) return closeReader();
     if (npcs.shopOpen) { npcs.closeShop(); return; }
     if (dialogue.active) { dialogue.close(); return; }
+    if (journalOpen()) { toggleJournal(); return; }
     if (mapOpen) { toggleMap(); return; }
   }
+  if (journalOpen()) { if (e.code === 'KeyJ') toggleJournal(); return; }
+  if (endingOpen()) return;
   if (readerOpen()) { if (e.code === 'KeyE') closeReader(); return; }
   if (npcs.shopOpen) { if (e.code === 'KeyE') { npcs.closeShop(); } return; }
   if (dialogue.active) return;
@@ -120,6 +139,7 @@ addEventListener('keydown', (e) => {
     case 'KeyE': { const n = getNearest(); if (n) n.run(); break; }
     case 'KeyK': save.save(true); break;
     case 'KeyL': save.load(); break;
+    case 'KeyJ': toggleJournal(); break;
     case 'Tab': e.preventDefault(); toggleMap(); break;
   }
 });
@@ -181,6 +201,28 @@ function drawMap() {
   mctx.restore();
 }
 
+// fast travel: click a discovered region on the map
+mapCanvas.addEventListener('click', (e) => {
+  if (!mapOpen) return;
+  const rect = mapCanvas.getBoundingClientRect();
+  const scale = mapCanvas.width / (world.WORLD * 2);
+  const mx = (e.clientX - rect.left) * (mapCanvas.width / rect.width);
+  const my = (e.clientY - rect.top) * (mapCanvas.height / rect.height);
+  const wx = (mx - mapCanvas.width / 2) / scale, wz = (my - mapCanvas.height / 2) / scale;
+  for (const r of REGIONS) {
+    if (dist2D(wx, wz, r.x, r.z) < r.r * 0.6) {
+      const discovered = r.id === 'gravewick' || quests.visited.has(r.id);
+      if (!discovered) { showToast(`${r.name} — undiscovered. Travel there on foot first.`); return; }
+      if (player.interior) { showToast('Not from in here.'); return; }
+      toggleMap();
+      interiors._fade('the black carriage knows every road', () => {
+        player.spawnAt(r.x, r.z + 6, Math.PI);
+      });
+      return;
+    }
+  }
+});
+
 // ---------- Compass ----------
 const compassNeedle = document.getElementById('compass-needle');
 function updateCompass() {
@@ -197,6 +239,64 @@ function updateCompass() {
     .map(m => `<span style="position:absolute;left:${m.x}px;transform:translateX(-50%);${m.l === '◈' ? 'color:#8dff6a' : ''}">${m.l}</span>`).join('');
   compassNeedle.style.position = 'relative'; compassNeedle.style.height = '20px'; compassNeedle.style.display = 'block';
 }
+
+// ---------- Journal ----------
+function toggleJournal() {
+  const open = !journalOpen();
+  journalEl.classList.toggle('hidden', !open);
+  if (open) { renderJournal(); if (document.pointerLockElement) document.exitPointerLock(); }
+  else relock();
+}
+function renderJournal() {
+  document.getElementById('j-objective').textContent = quests.steps[quests.step].text;
+
+  const bellsBox = document.getElementById('j-bells');
+  const dispLabel = { silence: 'Silenced', bind: 'Bound', give_church: 'Given · Church', give_court: 'Given · Court', feed: 'Fed to October' };
+  bellsBox.innerHTML = bells.list.map(b => {
+    if (b.resolved) return `<div class="j-bell">✓ ${b.name} <span class="d">— ${dispLabel[b.disposition] || 'resolved'}</span></div>`;
+    const gated = b.gate && !bells._gateOpen(b.gate);
+    return `<div class="j-bell unresolved">○ ${b.name}${gated ? ' <span class="d">(sealed)</span>' : ''}</div>`;
+  }).join('') + `<div class="j-bell" style="margin-top:6px">Bells dealt with: <b>${bells.resolved}</b> / ${bells.list.length}</div>`;
+
+  const curseBox = document.getElementById('j-curse');
+  curseBox.innerHTML = `<div class="j-row"><span>October's hold</span><span class="v">${Math.round(bells.curse)} / 100</span></div>
+    <div class="curse-track"><div class="curse-fill" style="width:${bells.curse}%"></div></div>
+    <div class="j-row" style="margin-top:6px"><span>Dread</span><span class="v">${Math.round(player.dread)}</span></div>`;
+
+  const facBox = document.getElementById('j-factions');
+  facBox.innerHTML = FACTIONS.map(f => {
+    const s = factions.standing(f.id);
+    const pct = (s.value + 100) / 2;
+    return `<div class="j-row"><span style="color:${f.color}">${f.name}</span><span class="v">${s.label}</span></div>
+      <div class="fac-bar"><div class="fac-fill" style="width:${pct}%;background:${f.color}"></div></div>`;
+  }).join('');
+
+  const st = player.stats;
+  document.getElementById('j-stats').innerHTML =
+    `<div class="j-row"><span>Level</span><span class="v">${player.level}</span></div>` +
+    `<div class="j-row"><span>Soulgilt</span><span class="v">◉ ${player.coin}</span></div>` +
+    Object.entries(st).map(([k, v]) => `<div class="j-row"><span>${k[0].toUpperCase() + k.slice(1)}</span><span class="v">${v}</span></div>`).join('') +
+    `<div class="j-row"><span>Companion</span><span class="v">${npcs.companion ? npcs.companion.name : '—'}</span></div>`;
+}
+
+// ---------- Ending ----------
+function showEnding(ending) {
+  const data = ENDINGS[ending] || ENDINGS.seal;
+  document.getElementById('ending-title').textContent = data.title;
+  document.getElementById('ending-body').textContent = data.body;
+  const counts = {};
+  for (const d of bells.dispositions) counts[d] = (counts[d] || 0) + 1;
+  document.getElementById('ending-stats').textContent =
+    `October's hold: ${Math.round(bells.curse)} · Bells: ${bells.resolved}/${bells.list.length} · Level ${player.level} · Dread ${Math.round(player.dread)}`;
+  endingEl.classList.remove('hidden');
+  if (document.pointerLockElement) document.exitPointerLock();
+  audio.bell(ending === 'november' ? 110 : 220);
+  setTimeout(() => audio.bell(160), 900);
+}
+document.getElementById('ending-again').addEventListener('click', () => {
+  try { localStorage.removeItem('hallowind.save.v1'); } catch {}
+  location.reload();
+});
 
 // ---------- HUD ----------
 let clockMin = 11 * 60 + 54;
@@ -301,6 +401,7 @@ function loop() {
     items.update(dt);
     npcs.update(dt);
     events.update(dt);
+    bells.update(dt);
     quests.update(dt);
     world.update(dt, player.pos);
     save.update(dt);
@@ -314,4 +415,4 @@ function loop() {
 }
 loop();
 
-window.HALLOWIND = { scene, world, player, enemies, weapons, quests, npcs, interiors, events, save, dialogue };
+window.HALLOWIND = { scene, world, player, enemies, weapons, quests, npcs, interiors, events, save, dialogue, factions, bells };

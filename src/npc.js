@@ -164,19 +164,23 @@ export class NPCs {
   }
   _renderShop() {
     document.getElementById('shop-coin-n').textContent = this.player.coin;
+    const disc = this.factions ? this.factions.vendorDiscount() : 0;
+    const t = document.getElementById('shop-title');
+    if (t) t.textContent = disc > 0 ? `THE MASK MARKET  ·  −${Math.round(disc * 100)}%` : 'THE MASK MARKET';
     const box = document.getElementById('shop-items');
     box.innerHTML = '';
     for (const it of this.SHOP) {
+      const price = Math.max(1, Math.round(it.cost * (1 - disc)));
       const row = document.createElement('div');
       row.className = 'shop-item';
       row.innerHTML = `<div class="info"><b>${it.name}</b><small>${it.desc}</small></div>`;
       const btn = document.createElement('button');
       btn.className = 'shop-buy';
-      btn.textContent = `◉ ${it.cost}`;
-      btn.disabled = this.player.coin < it.cost;
+      btn.textContent = `◉ ${price}`;
+      btn.disabled = this.player.coin < price;
       btn.onclick = () => {
-        if (this.player.coin < it.cost) return;
-        this.addCoin(-it.cost);
+        if (this.player.coin < price) return;
+        this.addCoin(-price);
         it.buy(this.player);
         this.audio.bell(440);
         showToast(`Bought ${it.name}`);

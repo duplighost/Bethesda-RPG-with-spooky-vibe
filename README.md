@@ -51,9 +51,10 @@ capture the mouse (pointer-lock); press **ESC** to release it.
 | **Q** | **Lantern Flare** — AoE stun, reveals ghosts, relieves Dread |
 | **1 / 2** | Select arm: Revolver / Hexbolt |
 | **R** | Reload |
-| **E** | Interact — read notes, take loot, **talk to NPCs**, enter buildings |
+| **E** | Interact — read notes, take loot, **talk to NPCs**, enter buildings, toll bells |
+| **J** | Journal — objective, bells, factions, character sheet |
 | **K / L** | Save / Load (also auto-saves) |
-| **TAB** | County map |
+| **TAB** | County map — click a discovered region to fast-travel |
 | **ESC** | Release cursor / back out of menus |
 
 ---
@@ -111,6 +112,27 @@ capture the mouse (pointer-lock); press **ESC** to release it.
 - **Save / load** to `localStorage` (K / L, plus autosave) — because the loop may
   repeat, but your progress shouldn't.
 
+### …and the main-quest arc
+
+- **Six faction reputations** (Lantern Wardens, Candle Church, Grinning Court,
+  Children of the Harvest, Ash Union Dead, Mask Market) that shift with your deeds
+  and dealings. Mask Market favour discounts the vendor; every bell choice swings
+  several factions at once.
+- **The Thirteen Harvest Bells** (five reachable in this slice) — each anchor of the
+  Long October can be **Silenced**, **Bound** to your will (Hex check), **Given** to
+  the Church or the Court, or **Fed** to the curse. Each choice moves a **curse
+  meter** and your faction standings.
+- **A second boss — The Harvest Engine** — a possessed foundry machine in Ashfall
+  Works (1100 HP, gear-and-furnace) that gates its Harvest Bell until you break it.
+- **Five endings.** Once four bells are dealt with, the **County Line altar** rises
+  in the far south. Your tally of choices, the curse meter, and your Dread decide
+  which ending you get: *Break the Curse*, *Rule the Curse*, *Feed the Curse*,
+  *Seal the County*, or the secret *Real November*.
+- **A journal (J)** showing your objective, every bell and how you resolved it, the
+  curse meter, all six faction standings, and your character sheet.
+- **Fast travel** — open the map (TAB) and click any region you've already
+  discovered; a black-carriage fade carries you there.
+
 > **Performance note:** rather than a real light per pumpkin (200+ would crush a
 > forward renderer), every glow is a free emissive sprite and a fixed pool of ~10
 > real point-lights is distance-culled to the nearest glow points each frame.
@@ -144,6 +166,8 @@ Plain ES modules, no bundler. Each system is one file under `src/`:
 | `npc.js` | Talkable NPCs, vendor + currency, companion |
 | `interiors.js` | Interior dungeons + diegetic load-fade |
 | `events.js` | Handcrafted dynamic world encounters |
+| `factions.js` | Six-faction reputation + standings |
+| `bells.js` | Harvest Bells, curse meter, the five endings |
 | `save.js` | localStorage save/load |
 | `audio.js` | Procedural Web Audio engine |
 | `utils.js` | Seeded RNG + shared helpers |
@@ -160,9 +184,11 @@ This is a **vertical slice / prototype**, not the 200-hour game from the design 
 It now implements the core pillars *and* a second tier — open world, gun+magic
 gameplay, AI enemies + a giant boss, environmental storytelling, RPG/Dread systems,
 branching dialogue, NPCs + a vendor economy, a companion, enterable interiors with
-diegetic loading, dynamic world events, and save/load — at a scale one developer can
-ship in a single project. The rest of the design (all 13 Harvest Bells and the five
-endings, six full faction questlines, the megadungeon interiors, deep crafting) lives
-in the brief; the code here is the foundation you'd grow it from.
+diegetic loading, dynamic world events, save/load, a six-faction reputation system,
+the Harvest Bells main-quest arc with **five working endings**, and a second boss —
+at a scale one developer can ship in a single project. The rest of the design (all
+thirteen bells rather than five, six full faction questlines, more megadungeon
+interiors, deep crafting) lives in the brief; the code here is the foundation you'd
+grow it from.
 
 Built with Three.js (MIT). Everything else is original and self-contained.

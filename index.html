@@ -103,7 +103,8 @@
       <div id="controls-hint" class="hidden">
         <b>WASD</b> move · <b>MOUSE</b> look · <b>SHIFT</b> sprint · <b>SPACE</b> jump<br/>
         <b>LMB</b> fire · <b>RMB</b> cast spell · <b>F</b> lantern · <b>Q</b> Lantern&nbsp;Flare<br/>
-        <b>1/2</b> revolver/hexbolt · <b>R</b> reload · <b>E</b> interact / talk · <b>TAB</b> map<br/>
+        <b>1/2</b> revolver/hexbolt · <b>R</b> reload · <b>E</b> interact / talk<br/>
+        <b>TAB</b> map (click a known region to fast-travel) · <b>J</b> journal<br/>
         <b>K</b> save · <b>L</b> load · <b>ESC</b> release cursor / back
       </div>
     </div>
@@ -124,6 +125,40 @@
       <h2>HALLOW COUNTY</h2>
       <canvas id="map-canvas" width="640" height="640"></canvas>
       <div class="reader-foot">[ <span class="key">TAB</span> to close ]</div>
+    </div>
+  </div>
+
+  <!-- ============ JOURNAL ============ -->
+  <div id="journal" class="overlay hidden">
+    <div id="journal-inner">
+      <h2>THE WICKMARKED'S LEDGER</h2>
+      <div id="journal-cols">
+        <div class="jcol">
+          <h3>◈ Objective</h3>
+          <div id="j-objective"></div>
+          <h3>⛓ The Thirteen Bells</h3>
+          <div id="j-bells"></div>
+          <h3>☾ The Long October</h3>
+          <div id="j-curse"></div>
+        </div>
+        <div class="jcol">
+          <h3>⚑ Factions</h3>
+          <div id="j-factions"></div>
+          <h3>✦ The Wickmarked</h3>
+          <div id="j-stats"></div>
+        </div>
+      </div>
+      <div class="reader-foot">[ <span class="key">J</span> to close ]</div>
+    </div>
+  </div>
+
+  <!-- ============ ENDING ============ -->
+  <div id="ending" class="overlay hidden">
+    <div id="ending-inner">
+      <h1 id="ending-title">—</h1>
+      <p id="ending-body"></p>
+      <div id="ending-stats"></div>
+      <button id="ending-again">LET THE LOOP TURN AGAIN</button>
     </div>
   </div>
 

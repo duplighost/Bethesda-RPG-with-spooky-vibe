@@ -24,6 +24,7 @@ export class Enemies {
     this.maxAmbient = 14;
     this.boss = null;
     this.bossTriggered = false;
+    this.engineTriggered = false;
     this.kills = 0;
     this._camForward = new THREE.Vector3();
   }
@@ -185,21 +186,62 @@ export class Enemies {
       resist: { silver: 0.7, witchfire: 1.5 }, dread: 0, xp: 600, isBoss: true,
       addCd: 5, bombCd: 4,
     });
+    boss.bossKind = 'marrow';
     this.boss = boss;
     this.bossTriggered = true;
-    this._showBossBar();
+    this._showBossBar('MARROW JACK');
     this.audio.bossRoar();
     showToast('MARROW JACK — Stitched King of the Thousand-Jack');
     whisper('learn its name, or burn it down');
     return boss;
   }
 
-  _showBossBar() {
+  spawnHarvestEngine(x, z) {
+    if (this.engine) return;
+    const g = new THREE.Group();
+    const iron = new THREE.MeshStandardMaterial({ color: 0x2a2420, metalness: 0.6, roughness: 0.5, flatShading: true });
+    const rust = new THREE.MeshStandardMaterial({ color: 0x4a2a18, metalness: 0.3, roughness: 0.9 });
+    // stacked boiler body
+    const base = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 4), iron); base.position.y = 1.5; base.castShadow = true; g.add(base);
+    const boiler = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2.0, 4, 12), rust); boiler.position.y = 4.5; boiler.castShadow = true; g.add(boiler);
+    const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.9, 3, 8), iron); stack.position.set(1.4, 7, -0.5); g.add(stack);
+    // spinning gears (this is the "headGrp" the boss-think rotates)
+    const gears = new THREE.Group(); gears.position.set(0, 4.2, 2.1); g.add(gears);
+    for (let i = 0; i < 3; i++) {
+      const gear = new THREE.Mesh(new THREE.TorusGeometry(0.8 - i * 0.18, 0.22, 6, 12), iron);
+      gear.position.set(-1.4 + i * 1.4, i * 0.4, 0); gears.add(gear);
+    }
+    // furnace weak point — a cracked glowing pressure gauge / heart
+    const heart = new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 12),
+      new THREE.MeshStandardMaterial({ color: 0xff3a10, emissive: 0xff3a10, emissiveIntensity: 1.4 }));
+    heart.position.set(0, 2.2, 2.05); g.add(heart);
+    const hl = new THREE.PointLight(0xff4a1e, 2.2, 26, 2); hl.position.set(0, 3, 2); g.add(hl);
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.world._glowTex, color: 0xff5a1e, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false }));
+    spr.scale.setScalar(4); spr.position.set(0, 3, 2.2); g.add(spr);
+
+    g.position.set(x, this.world.getHeight(x, z), z);
+    g.scale.setScalar(1.4);
+    const boss = this._register({
+      type: 'boss', group: g, headGrp: gears,
+      hp: 1100, maxHp: 1100, speed: 1.3, dmg: 30, atkCd: 0, atkRange: 8,
+      state: 'hunt', stagger: 0, dead: false, dyingT: 0, phase: 1,
+      resist: { silver: 0.55, witchfire: 1.35 }, dread: 0, xp: 700, isBoss: true,
+      addCd: 4, bombCd: 5, bossKind: 'engine',
+    });
+    this.engine = boss; this.boss = boss; this.engineTriggered = true;
+    this._showBossBar('THE HARVEST ENGINE');
+    this.audio.bossRoar();
+    showToast('THE HARVEST ENGINE — the foundry will not clock out');
+    whisper('exorcise the workers, then break its heart');
+    return boss;
+  }
+
+  _showBossBar(name = 'MARROW JACK') {
     let bar = document.getElementById('boss-bar');
     if (!bar) {
       bar = document.createElement('div');
       bar.id = 'boss-bar';
-      bar.innerHTML = `<div id="boss-name">MARROW JACK</div><div id="boss-track"><div id="boss-fill"></div></div>`;
+      bar.innerHTML = `<div id="boss-name"></div><div id="boss-track"><div id="boss-fill"></div></div>`;
       Object.assign(bar.style, {
         position: 'fixed', left: '50%', bottom: '7%', transform: 'translateX(-50%)',
         width: '46%', textAlign: 'center', zIndex: 12, pointerEvents: 'none',
@@ -212,6 +254,8 @@ export class Enemies {
       const fl = bar.querySelector('#boss-fill');
       Object.assign(fl.style, { height: '100%', width: '100%', background: 'linear-gradient(90deg,#7a0d12,#ff5a1e)' });
     }
+    bar.querySelector('#boss-name').textContent = name;
+    document.getElementById('boss-fill').style.width = '100%';
     bar.style.display = 'block';
   }
   _hideBossBar() { const b = document.getElementById('boss-bar'); if (b) b.style.display = 'none'; }
@@ -256,6 +300,7 @@ export class Enemies {
     e.dead = true; e.dyingT = e.isBoss ? 2.4 : 0.6; e.state = 'die';
     this.kills++;
     this.player.addXP(e.xp);
+    if (this.factions) this.factions.onKill(e);
     if (e.onDeath) e.onDeath();
     // drop soulgilt currency
     const reward = Math.max(1, Math.round(e.xp * (e.isBoss ? 0.5 : 0.4)));
@@ -263,11 +308,19 @@ export class Enemies {
     const cn = document.getElementById('coin-n'); if (cn) cn.textContent = this.player.coin;
     if (e.isBoss) {
       this._hideBossBar();
-      showToast('Marrow Jack falls. The field exhales.');
-      whisper('the first bell is silenced');
       this.audio.bell(180);
       this.player.relieveDread(30);
-      if (this.onBossDefeated) this.onBossDefeated();
+      if (e.bossKind === 'engine') {
+        this.engine = null; this.boss = null;
+        showToast('The Harvest Engine seizes. Seventy-three Octobers of overtime, ended.');
+        whisper('the foundry bell is free');
+        if (this.onEngineDefeated) this.onEngineDefeated();
+      } else {
+        this.boss = null;
+        showToast('Marrow Jack falls. The field exhales.');
+        whisper('the first bell is silenced');
+        if (this.onBossDefeated) this.onBossDefeated();
+      }
     }
   }
 
@@ -310,6 +363,11 @@ export class Enemies {
     if (!this.bossTriggered && this.world.bossArena) {
       const a = this.world.bossArena;
       if (dist2D(p.x, p.z, a.x, a.z) < a.r) this.spawnBoss(a.x, a.z);
+    }
+    // Ashfall Harvest Engine trigger
+    if (!this.engineTriggered && !this.player.interior) {
+      const reg = this.world.regionAt(p.x, p.z);
+      if (reg.id === 'ashfall' && dist2D(p.x, p.z, reg.x, reg.z) < 38) this.spawnHarvestEngine(reg.x + 14, reg.z + 10);
     }
 
     // ambient spawns

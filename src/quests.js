@@ -25,7 +25,9 @@ export class Quests {
         done: () => this.flags.nameFound },
       { text: 'Silence the first Harvest Bell: face Marrow Jack at the Thousand-Jack.',
         done: () => this.flags.bossDead },
-      { text: 'One bell silenced. Twelve remain. Break the county, rule it, or feed it.',
+      { text: 'Seek the other Harvest Bells across the county. Silence, bind, give, or feed each one.',
+        done: () => this.flags.endgameOpen },
+      { text: 'The County Line altar has risen in the far south. End the Long October.',
         done: () => false },
     ];
   }
@@ -63,6 +65,13 @@ export class Quests {
     showToast('THE FIRST HARVEST BELL IS SILENCED');
   }
 
+  onBellResolved(resolved, total) {
+    showToast(`Harvest Bells dealt with: ${resolved}`);
+  }
+  openEndgame() {
+    this.flags.endgameOpen = true;
+  }
+
   update(dt) {
     // region discovery
     const p = this.player.pos;
@@ -95,6 +104,18 @@ export class Quests {
       case 2:
       case 3: return { x: REGIONS[1].x, z: REGIONS[1].z };
       case 4: return { x: REGIONS[5].x, z: REGIONS[5].z };
+      case 5: { // nearest unresolved bell
+        if (!this.bellsRef) return null;
+        const p = this.player.pos; let best = null, bd = Infinity;
+        for (const b of this.bellsRef.list) {
+          if (b.resolved || b.auto) continue;
+          const t = b.mesh ? b.mesh.position : { x: b.x, z: b.z };
+          const d = dist2D(p.x, p.z, t.x, t.z);
+          if (d < bd) { bd = d; best = { x: t.x, z: t.z }; }
+        }
+        return best;
+      }
+      case 6: return this.bellsRef?.altar ? { x: this.bellsRef.altar.position.x, z: this.bellsRef.altar.position.z } : { x: 40, z: 840 };
       default: return null;
     }
   }
