@@ -506,6 +506,9 @@ export class World {
     const reg = REGIONS[4];
     // smokestacks + boxy factory
     this._house(reg.x, reg.z, 22, 16, 9, 0x2a2622, 0.1);
+    // Harrow & Sons Toyworks — the doll factory you can enter (door at -360,-240)
+    this._house(-360, -240, 14, 11, 7, 0x322018, 0);
+    this._jackolantern(-360, -246, 0.9);
     for (let i = 0; i < 3; i++) {
       const sx = reg.x - 8 + i * 8, sz = reg.z - 10;
       const stack = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.8, 16, 10),

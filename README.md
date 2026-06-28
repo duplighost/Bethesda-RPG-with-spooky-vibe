@@ -133,6 +133,22 @@ capture the mouse (pointer-lock); press **ESC** to release it.
 - **Fast travel** — open the map (TAB) and click any region you've already
   discovered; a black-carriage fade carries you there.
 
+### …and the latest tier
+
+- **Character backgrounds** — choose who you were before the coffin (Gravedigger,
+  Hexwright, Lawman, Cinder-Witch, Mourner). Each sets starting stats, gear, soulgilt,
+  faction standing, and which spells start within reach.
+- **A multi-school spell system** — equip from a roster across Hexcraft, Harvestcraft,
+  Gravecraft and Bloodcraft (keys **3–8** or the mouse wheel while the lantern hand is
+  out): **Hexbolt**, **Pumpkin Bomb** (lobbed AoE), **Vine Snare** (root + slow),
+  **Raise Husk** (a temporary undead ally that fights for you), **Blood Ward** (spend
+  HP for an absorbing shield), and **Red Stitch** (a lifesteal window). Spells unlock
+  as your Hex grows.
+- **A new enemy family — Dolls** — porcelain **Biters** that scrabble on all fours,
+  shrug off bullets, and crack under witchfire — led by the **Doll-Mother** mini-boss.
+- **A new interior dungeon — Harrow & Sons Toyworks** — a doll factory whose assembly
+  line never stopped; clear the Doll-Mother for *Mother's Spool*.
+
 > **Performance note:** rather than a real light per pumpkin (200+ would crush a
 > forward renderer), every glow is a free emissive sprite and a fixed pool of ~10
 > real point-lights is distance-culled to the nearest glow points each frame.
@@ -168,6 +184,7 @@ Plain ES modules, no bundler. Each system is one file under `src/`:
 | `events.js` | Handcrafted dynamic world encounters |
 | `factions.js` | Six-faction reputation + standings |
 | `bells.js` | Harvest Bells, curse meter, the five endings |
+| `backgrounds.js` | Character creation backgrounds |
 | `save.js` | localStorage save/load |
 | `audio.js` | Procedural Web Audio engine |
 | `utils.js` | Seeded RNG + shared helpers |

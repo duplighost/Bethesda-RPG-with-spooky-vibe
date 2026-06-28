@@ -81,6 +81,14 @@ canvas#game{position:fixed;inset:0;display:block}
 #lantern-on{color:#555}
 #lantern-on.lit{color:var(--pumpkin);text-shadow:0 0 10px var(--pumpkin)}
 
+#spellbar{position:absolute;right:24px;bottom:118px;display:flex;flex-direction:column;gap:3px;align-items:flex-end}
+.spell-chip{font-size:11px;letter-spacing:1px;color:#6a7080;padding:2px 8px;border:1px solid transparent;border-radius:3px;text-shadow:0 1px 3px #000}
+.spell-chip .hk{display:inline-block;min-width:14px;color:#445;font-family:monospace;margin-right:6px}
+.spell-chip.unlocked{color:#9fd0a0}
+.spell-chip.equipped{color:#9dff6a;border-color:rgba(141,255,106,.4);background:rgba(141,255,106,.08)}
+.spell-chip.equipped .hk{color:#8dff6a}
+.spell-chip.cooling{opacity:.45}
+
 #whisper{position:absolute;left:50%;bottom:18%;transform:translateX(-50%);
   font-style:italic;font-size:20px;color:#c9b8d8;text-shadow:0 0 16px #401050,0 2px 4px #000;
   opacity:0;transition:opacity 1.2s;text-align:center;max-width:60%}
@@ -119,6 +127,16 @@ button{pointer-events:auto;cursor:pointer;font-family:inherit;font-size:18px;let
   color:var(--bone);background:rgba(255,122,24,.08);border:1px solid var(--pumpkin);
   padding:13px 40px;border-radius:3px;transition:.2s;text-shadow:0 0 8px #000}
 button:hover{background:rgba(255,122,24,.22);box-shadow:0 0 26px rgba(255,122,24,.5);color:#fff}
+#bg-select{margin:6px 0 24px}
+#bg-prompt{font-size:15px;letter-spacing:3px;color:var(--fog);margin-bottom:14px;font-style:italic}
+#bg-cards{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:760px}
+.bg-card{pointer-events:auto;cursor:pointer;width:230px;text-align:left;padding:13px 16px;
+  border:1px solid rgba(232,226,208,.2);border-radius:5px;background:rgba(255,255,255,.03);transition:.15s}
+.bg-card:hover{border-color:var(--pumpkin);background:rgba(255,122,24,.1)}
+.bg-card.sel{border-color:var(--pumpkin);background:rgba(255,122,24,.16);box-shadow:0 0 20px rgba(255,122,24,.35)}
+.bg-card .bn{font-size:16px;color:var(--pumpkin-soft);letter-spacing:1px;font-variant:small-caps}
+.bg-card .bd{font-size:12px;color:#bdb6a4;line-height:1.4;margin:5px 0 7px}
+.bg-card .bp{font-size:11px;color:var(--witch);line-height:1.35;letter-spacing:.3px}
 #controls-hint{margin-top:26px;font-size:13px;line-height:2;color:var(--fog);letter-spacing:1px}
 #controls-hint b{color:var(--pumpkin-soft)}
 

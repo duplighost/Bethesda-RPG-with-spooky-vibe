@@ -123,6 +123,35 @@ export class Enemies {
     });
   }
 
+  spawnDoll(x, z, mother = false) {
+    const g = new THREE.Group();
+    const porc = new THREE.MeshStandardMaterial({ color: 0xe8e0d4, roughness: 0.4, metalness: 0.05 });
+    const dress = new THREE.MeshStandardMaterial({ color: mother ? 0x4a1020 : 0x6a2030, roughness: 1 });
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 12), porc);
+    head.position.y = 1.0; head.castShadow = true; g.add(head);
+    // cracked black button eyes
+    const em = new THREE.MeshBasicMaterial({ color: 0x0a0a0a });
+    const e1 = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), em); e1.position.set(-0.1, 1.03, 0.22); g.add(e1);
+    const e2 = e1.clone(); e2.position.x = 0.1; g.add(e2);
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.04), em); mouth.position.set(0, 0.88, 0.24); g.add(mouth);
+    const body = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.8, 8), dress);
+    body.position.y = 0.5; body.castShadow = true; g.add(body);
+    // porcelain limbs
+    for (const sx of [-0.22, 0.22]) {
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 5), porc);
+      arm.position.set(sx, 0.7, 0); arm.rotation.z = sx > 0 ? 0.6 : -0.6; g.add(arm);
+    }
+    g.position.set(x, this.world.getHeight(x, z), z);
+    if (mother) g.scale.setScalar(2.1);
+    return this._register({
+      type: 'doll', group: g, head, isMother: mother,
+      hp: mother ? 300 : 18, maxHp: mother ? 300 : 18,
+      speed: mother ? 5 : 9.2, dmg: mother ? 16 : 7, atkCd: 0, atkRange: mother ? 3 : 1.7,
+      state: 'hunt', stagger: 0, dead: false, dyingT: 0, hopPhase: Math.random() * TAU, addCd: 3,
+      resist: { silver: 0.45, witchfire: 1.25 }, dread: mother ? 0.6 : 0.25, xp: mother ? 170 : 12,
+    });
+  }
+
   spawnWerebeast(x, z) {
     const g = new THREE.Group();
     const fur = new THREE.MeshStandardMaterial({ color: 0x241a16, roughness: 1, flatShading: true });
@@ -353,6 +382,37 @@ export class Enemies {
     }
   }
 
+  // Vine Snare — root + slow everything in an area.
+  snare(center, radius, duration) {
+    let n = 0;
+    for (const e of this.list) {
+      if (e.dead) continue;
+      if (dist2D(center.x, center.z, e.group.position.x, e.group.position.z) < radius) {
+        e.stagger = Math.max(e.stagger, duration);
+        if (!e.isBoss) { e.snaredSpeed = e.snaredSpeed ?? e.speed; e.speed = e.snaredSpeed * 0.25; e.unsnareT = duration; }
+        n++;
+      }
+    }
+    return n;
+  }
+
+  // Pumpkin-bomb area damage.
+  areaDamage(center, radius, dmg, type) {
+    for (const e of this.list) {
+      if (e.dead) continue;
+      const d = dist2D(center.x, center.z, e.group.position.x, e.group.position.z);
+      if (d < radius) this.applyDamage(e, dmg * (1 - d / radius * 0.5), e.group.position, type, false);
+    }
+  }
+
+  spawnExplosion(pos, radius) {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.2, radius, 24),
+      new THREE.MeshBasicMaterial({ color: 0xff7a1e, transparent: true, opacity: 0.6, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(pos.x, this.world.getHeight(pos.x, pos.z) + 0.2, pos.z);
+    this.scene.add(ring);
+    (this._rings ||= []).push({ mesh: ring, life: 0.4 });
+  }
+
   // ---------- per-frame ----------
   update(dt) {
     const p = this.player.pos;
@@ -400,6 +460,15 @@ export class Enemies {
         if (f.userData.life <= 0) { this.scene.remove(f); f.geometry.dispose(); this._fx.splice(i, 1); }
       }
     }
+    // explosion rings
+    if (this._rings) {
+      for (let i = this._rings.length - 1; i >= 0; i--) {
+        const r = this._rings[i]; r.life -= dt;
+        r.mesh.scale.multiplyScalar(1 + dt * 2);
+        r.mesh.material.opacity = Math.max(0, r.life * 1.5);
+        if (r.life <= 0) { this.scene.remove(r.mesh); r.mesh.geometry.dispose(); this._rings.splice(i, 1); }
+      }
+    }
   }
 
   _ambientSpawn(dt) {
@@ -429,6 +498,11 @@ export class Enemies {
       if (roll < 0.5) this.spawnScarecrow(x, z);
       else if (roll < 0.85) this.spawnJackling(x, z);
       else this.spawnGhost(x, z);
+    } else if (reg.id === 'ashfall') {
+      if (roll < 0.45) this.spawnDoll(x, z);
+      else if (roll < 0.7) this.spawnGhost(x, z);
+      else if (roll < 0.9) this.spawnScarecrow(x, z);
+      else this.spawnJackling(x, z);
     } else {
       if (roll < 0.4) this.spawnScarecrow(x, z);
       else if (roll < 0.7) this.spawnJackling(x, z);
@@ -461,6 +535,7 @@ export class Enemies {
   _think(e, dt, p) {
     e.stagger = Math.max(0, e.stagger - dt);
     if (e.vulnTimer) { e.vulnTimer -= dt; if (e.vulnTimer <= 0) e.vulnerable = false; }
+    if (e.unsnareT) { e.unsnareT -= dt; if (e.unsnareT <= 0 && e.snaredSpeed != null) { e.speed = e.snaredSpeed; e.snaredSpeed = null; } }
 
     if (e.state === 'die') {
       e.dyingT -= dt;
@@ -489,6 +564,24 @@ export class Enemies {
       const d = this._faceAndStep(e, dt, p, e.stagger > 0);
       e.group.position.y = gy + e.hover + Math.sin(performance.now() * 0.008 + e.id) * 0.18;
       this._tryAttack(e, dt, p, d);
+    }
+    else if (e.type === 'doll') {
+      const d = this._faceAndStep(e, dt, p, e.stagger > 0);
+      e.hopPhase += dt * 16;
+      e.group.position.y = gy + Math.abs(Math.sin(e.hopPhase)) * (e.isMother ? 0.1 : 0.28);
+      e.group.rotation.x = Math.sin(e.hopPhase) * 0.2;   // scrabbling tilt
+      this._tryAttack(e, dt, p, d);
+      if (e.isMother) {
+        e.addCd -= dt;
+        if (e.addCd <= 0) {
+          e.addCd = 4;
+          const dolls = this.list.filter(x => !x.dead && x.type === 'doll' && !x.isMother).length;
+          if (dolls < 7) {
+            const a = Math.random() * TAU;
+            this.spawnDoll(e.group.position.x + Math.cos(a) * 2.5, e.group.position.z + Math.sin(a) * 2.5);
+          }
+        }
+      }
     }
     else if (e.type === 'werebeast') {
       const d = this._faceAndStep(e, dt, p, e.stagger > 0);

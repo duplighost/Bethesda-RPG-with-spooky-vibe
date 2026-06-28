@@ -44,6 +44,8 @@ export class Player {
     // vitals
     this.maxHP = 100; this.hp = 100;
     this.maxWisp = 100; this.wisp = 100;   // mana for spells
+    this.shield = 0; this.shieldMax = 0;   // Blood Ward absorb
+    this.lifestealT = 0;                   // Red Stitch window
     this.dread = 0;                        // 0..100
     this.dreadTarget = 0;
 
@@ -85,6 +87,12 @@ export class Player {
     if (this.dead) return;
     // Grit reduces incoming damage a touch.
     amount *= clamp(1 - this.stats.grit * 0.03, 0.4, 1);
+    // Blood Ward absorbs first.
+    if (this.shield > 0) {
+      const a = Math.min(this.shield, amount);
+      this.shield -= a; amount -= a;
+      if (amount <= 0) { this._hurtT = 0.3; this.audio.hurt(); return; }
+    }
     this.hp = Math.max(0, this.hp - amount);
     this._hurtT = 0.5;
     this.audio.hurt();
@@ -120,7 +128,7 @@ export class Player {
       this.skillPoints++;
       showToast(`◆ LEVEL ${this.level} — the loop knows you better now`);
       this.audio.bell(330);
-      document.getElementById('level').textContent = `Wickmarked · Lv ${this.level}`;
+      document.getElementById('level').textContent = `${this.background || 'Wickmarked'} · Lv ${this.level}`;
     }
   }
 
@@ -200,6 +208,10 @@ export class Player {
     const targetL = this.lanternOn ? 2.6 + Math.sin(performance.now() * 0.02) * 0.3 : 0.0;
     this.lantern.intensity = lerp(this.lantern.intensity, targetL, 1 - Math.pow(0.01, dt));
     this.sightLight.intensity = lerp(this.sightLight.intensity, this.lanternOn ? 0.8 : 0.0, 1 - Math.pow(0.01, dt));
+
+    // blood ward + lifesteal timers
+    if (this.shieldT > 0) { this.shieldT -= dt; if (this.shieldT <= 0) this.shield = 0; }
+    if (this.lifestealT > 0) this.lifestealT -= dt;
 
     // regen wisp; regen hp slowly when calm
     this.wisp = Math.min(this.maxWisp, this.wisp + dt * (4 + this.stats.hex * 0.4));

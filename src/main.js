@@ -17,6 +17,7 @@ import { Events } from './events.js';
 import { Save } from './save.js';
 import { Factions, FACTIONS } from './factions.js';
 import { Bells, ENDINGS } from './bells.js';
+import { BACKGROUNDS } from './backgrounds.js';
 import { clamp, dist2D, TAU, showToast } from './utils.js';
 
 // ---------- Renderer / Scene / Camera ----------
@@ -136,6 +137,12 @@ addEventListener('keydown', (e) => {
     case 'KeyR': weapons.reload(); break;
     case 'Digit1': weapons.setMode('gun'); break;
     case 'Digit2': weapons.setMode('spell'); break;
+    case 'Digit3': weapons.equipSpell(0); break;
+    case 'Digit4': weapons.equipSpell(1); break;
+    case 'Digit5': weapons.equipSpell(2); break;
+    case 'Digit6': weapons.equipSpell(3); break;
+    case 'Digit7': weapons.equipSpell(4); break;
+    case 'Digit8': weapons.equipSpell(5); break;
     case 'KeyE': { const n = getNearest(); if (n) n.run(); break; }
     case 'KeyK': save.save(true); break;
     case 'KeyL': save.load(); break;
@@ -163,6 +170,10 @@ canvas.addEventListener('mousedown', (e) => {
 });
 addEventListener('mouseup', (e) => { if (e.button === 0) lmb = false; if (e.button === 2) rmb = false; });
 addEventListener('contextmenu', (e) => e.preventDefault());
+addEventListener('wheel', (e) => {
+  if (!started || uiBlocking() || weapons.mode !== 'spell') return;
+  weapons.cycleSpell(e.deltaY > 0 ? 1 : -1);
+}, { passive: true });
 
 document.addEventListener('pointerlockchange', () => {
   paused = document.pointerLockElement !== canvas;
@@ -321,12 +332,28 @@ function updateHUD(dt) {
   const ampm = hr >= 12 ? 'PM' : 'AM'; let h12 = hr % 12; if (h12 === 0) h12 = 12;
   document.getElementById('clock').textContent = `${h12}:${String(mn).padStart(2, '0')} ${ampm} · Hallow's Eve`;
 
+  renderSpellbar();
+
   const near = uiBlocking() ? null : getNearest();
   const prompt = document.getElementById('prompt');
   if (near) { prompt.classList.add('show'); document.getElementById('prompt-text').textContent = near.prompt; }
   else prompt.classList.remove('show');
 
   updateCompass();
+}
+
+// spell bar (only while the lantern hand is active)
+const spellbarEl = document.getElementById('spellbar');
+function renderSpellbar() {
+  if (weapons.mode !== 'spell') { spellbarEl.classList.add('hidden'); return; }
+  spellbarEl.classList.remove('hidden');
+  spellbarEl.innerHTML = weapons.spells.map((s, i) => {
+    const unlocked = weapons.spellUnlocked(s);
+    const eq = i === weapons.spellIndex;
+    const cls = ['spell-chip', unlocked ? 'unlocked' : '', eq ? 'equipped' : '', (eq && weapons.spellCd > 0) ? 'cooling' : ''].filter(Boolean).join(' ');
+    const label = unlocked ? s.name : `${s.name} · Hex ${s.reqHex}`;
+    return `<div class="${cls}"><span class="hk">${i + 3}</span>${label}</div>`;
+  }).join('');
 }
 
 // ---------- Intro ----------
@@ -349,7 +376,8 @@ function runIntro() {
       buf += (i ? '\n' : '') + INTRO[i]; introLinesEl.textContent = buf; i++;
       setTimeout(tick, 950);
     } else {
-      ['title-card', 'title-sub', 'begin', 'controls-hint'].forEach(id => document.getElementById(id).classList.remove('hidden'));
+      ['title-card', 'title-sub', 'bg-select', 'begin', 'controls-hint'].forEach(id => document.getElementById(id).classList.remove('hidden'));
+      renderBackgroundCards();
       if (save.has()) {
         const b = document.getElementById('begin');
         const cont = document.createElement('button');
@@ -363,11 +391,31 @@ function runIntro() {
 }
 runIntro();
 
+let selectedBg = 0;
+function renderBackgroundCards() {
+  const box = document.getElementById('bg-cards');
+  box.innerHTML = BACKGROUNDS.map((b, i) => `
+    <div class="bg-card${i === selectedBg ? ' sel' : ''}" data-i="${i}">
+      <div class="bn">${b.name}</div>
+      <div class="bd">${b.blurb}</div>
+      <div class="bp">${b.perk}</div>
+    </div>`).join('');
+  box.querySelectorAll('.bg-card').forEach(el => {
+    el.addEventListener('click', () => { selectedBg = +el.dataset.i; renderBackgroundCards(); });
+  });
+}
+
 function beginGame(loadSave) {
   audio.init();
   document.getElementById('intro').classList.add('hidden');
   document.getElementById('hud').classList.remove('hidden');
   player.spawnAt(world.funeralHome.x, world.funeralHome.z + 9, Math.PI);
+  if (!loadSave) {
+    const bg = BACKGROUNDS[selectedBg];
+    bg.apply(player, weapons, factions);
+    document.getElementById('level').textContent = `${bg.name} · Lv ${player.level}`;
+    showToast(`You were ${bg.name}.`);
+  }
   weapons.setMode('gun');
   document.getElementById('coin-n').textContent = player.coin;
   started = true;

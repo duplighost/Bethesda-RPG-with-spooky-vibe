@@ -28,6 +28,7 @@ export class Interiors {
     this.doors = [
       { x: -70, z: 70, r: 3.5, id: 'bellweather', label: 'enter · The Bellweather House' },
       { x: -300, z: 180, r: 3.5, id: 'grinhut', label: "enter · Old Mother Grin's Hut" },
+      { x: -360, z: -240, r: 4, id: 'toyworks', label: 'enter · Harrow & Sons Toyworks' },
     ];
     // align door triggers to the actual doorway (front wall, world space)
     this._placeDoors();
@@ -123,7 +124,9 @@ export class Interiors {
   _buildOrGet(id) {
     if (this.built[id]) { this.built[id].group.visible = true; return this.built[id]; }
     const base = { x: 6000 + Object.keys(this.built).length * 400, z: 6000 };
-    const cell = (id === 'bellweather') ? this._bellweather(base) : this._grinhut(base);
+    const cell = id === 'bellweather' ? this._bellweather(base)
+      : id === 'toyworks' ? this._toyworks(base)
+      : this._grinhut(base);
     this.built[id] = cell;
     return cell;
   }
@@ -359,6 +362,80 @@ I have baked two hundred years and never gone hungry.`);
     w.hp = w.maxHp = 200; w.xp = 140;
     showToast('“Rude.” The knives wake up.');
     this.audio.bossRoar();
+  }
+
+  // ---------------- Harrow & Sons Toyworks ----------------
+  _toyworks(base) {
+    const W = 26, D = 18, H = 5;
+    const { group, colliders } = this._room(base, W, D, H, 0x0a0808);
+    const cell = { id: 'toyworks', name: 'HARROW & SONS TOYWORKS', group, colliders,
+      floorY: 0, min: { x: base.x - W / 2 + 1, z: base.z - D / 2 + 1 }, max: { x: base.x + W / 2 - 1, z: base.z + D / 2 - 1 },
+      spawn: { x: base.x, z: base.z + D / 2 - 2, yaw: Math.PI }, interactables: [], cleared: false };
+
+    // grim red work-light + a cold one
+    this._interiorLight(group, base.x - 6, base.z, 0xff3a1e, 1.3, 16);
+    this._interiorLight(group, base.x + 7, base.z - 4, 0x6fa0ff, 0.7, 12);
+
+    // the assembly line — a long conveyor of dark steel, still running
+    const belt = new THREE.Mesh(new THREE.BoxGeometry(18, 0.4, 1.6),
+      new THREE.MeshStandardMaterial({ color: 0x14110d, metalness: 0.5, roughness: 0.6 }));
+    belt.position.set(base.x, 0.9, base.z + 1); group.add(belt);
+    colliders.push({ minX: base.x - 9, maxX: base.x + 9, minZ: base.z + 0.2, maxZ: base.z + 1.8 });
+    // half-built dolls riding the belt
+    for (let i = 0; i < 9; i++) {
+      const h = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8),
+        new THREE.MeshStandardMaterial({ color: 0xe8e0d4, roughness: 0.4 }));
+      h.position.set(base.x - 8 + i * 2, 1.25, base.z + 1); group.add(h);
+    }
+    // dolls hung from the ceiling on strings
+    for (let i = 0; i < 10; i++) {
+      const x = base.x - 10 + Math.random() * 20, z = base.z - D / 2 + 1.5 + Math.random() * 4;
+      const str = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 2, 3),
+        new THREE.MeshStandardMaterial({ color: 0x222018 }));
+      str.position.set(x, H - 1, z); group.add(str);
+      const d = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8),
+        new THREE.MeshStandardMaterial({ color: 0xd8d0c4, roughness: 0.5 }));
+      d.position.set(x, H - 2, z); group.add(d);
+    }
+
+    this._note(cell, base.x - 9, base.z + 4, 'Harrow & Sons — Quality Control',
+`Each doll is stuffed to specification: one lock of hair, one milk-tooth,
+one secret the customer swore they'd take to the grave.
+We do not ask where Mother sources the secrets.
+We have stopped asking where Mother sources the children.
+The line runs three shifts. Mother runs all three.`);
+
+    this._exitObject(cell, base.x, base.z + D / 2 - 1.2);
+
+    cell.onEnter = () => {
+      if (cell.cleared || cell.mother) return;
+      showToast('The line shudders. Something enormous unfolds off its hook.');
+      whisper('“playtime. i made you a friend. i made you ALL my friends.”');
+      setTimeout(() => {
+        for (let i = 0; i < 3; i++) this.enemies.spawnDoll(base.x - 2 + i * 2, base.z - 2);
+        const m = this.enemies.spawnDoll(base.x, base.z - 4, true);
+        m.onDeath = () => this._toyworksCleared(cell, base);
+        cell.mother = m;
+        this.audio.bossRoar();
+      }, 1200);
+    };
+    return cell;
+  }
+
+  _toyworksCleared(cell, base) {
+    cell.cleared = true;
+    showToast('The Doll-Mother comes apart into a hundred quiet faces.');
+    whisper('the line finally stops');
+    this.player.maxWisp += 25; this.player.wisp = this.player.maxWisp; this.player.addXP(120);
+    this.player.stats.tinker = (this.player.stats.tinker || 0) + 1;
+    const spool = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.4, 10),
+      new THREE.MeshStandardMaterial({ color: 0x8a1a2a, emissive: 0x3a0a14, emissiveIntensity: 0.6 }));
+    spool.position.set(base.x, 1.0, base.z - 4); cell.group.add(spool);
+    cell.interactables.push({
+      pos: spool.position.clone(), radius: 3, prompt: "take · Mother's Spool", used: false,
+      run: () => { cell.group.remove(spool); this.audio.pickup();
+        showToast("MOTHER'S SPOOL — +25 max Wisp. It is warm, and it is someone's hair."); },
+    });
   }
 }
 

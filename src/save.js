@@ -22,7 +22,7 @@ export class Save {
       stats: p.stats, level: p.level, xp: p.xp, xpNext: p.xpNext,
       maxHP: p.maxHP, hp: p.hp, maxWisp: p.maxWisp, wisp: p.wisp,
       dread: p.dread, coin: p.coin, skillPoints: p.skillPoints,
-      lanternOn: p.lanternOn, flags: p.flags,
+      lanternOn: p.lanternOn, flags: p.flags, background: p.background,
       ammoMax: this.weapons.ammoMax,
       questStep: this.quests.step, questFlags: this.quests.flags,
       visited: [...this.quests.visited],
@@ -50,6 +50,7 @@ export class Save {
     p.maxHP = data.maxHP; p.hp = data.hp; p.maxWisp = data.maxWisp; p.wisp = data.wisp;
     p.dread = p.dreadTarget = data.dread; p.coin = data.coin; p.skillPoints = data.skillPoints || 0;
     p.flags = data.flags || {};
+    p.background = data.background;
     if (data.lanternOn && !p.lanternOn) p.toggleLantern();
     this.weapons.ammoMax = data.ammoMax || 6; this.weapons.ammo = this.weapons.ammoMax;
 
@@ -59,7 +60,7 @@ export class Save {
     this.quests.set(this.quests.steps[this.quests.step].text);
 
     document.getElementById('coin-n').textContent = p.coin;
-    document.getElementById('level').textContent = `Wickmarked · Lv ${p.level}`;
+    document.getElementById('level').textContent = `${p.background || 'Wickmarked'} · Lv ${p.level}`;
 
     if (data.companion && !this.npcs.companion) {
       const m = this.npcs.list.find(n => n.name === data.companion);
