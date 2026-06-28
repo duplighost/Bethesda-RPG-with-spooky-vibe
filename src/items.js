@@ -1,0 +1,192 @@
+// ============================================================
+// items.js — interactables: readable notes (the Bethesda
+// environmental-storytelling backbone), loot pickups, and the
+// quest-flag objects. Press E when the prompt shows.
+// ============================================================
+import * as THREE from 'three';
+import { dist2D, showToast, whisper } from './utils.js';
+
+// Hand-written notes scattered across the county. Each is a tiny tragedy.
+export const NOTES = [
+  { x: 0, z: -52, title: "Embalmer's Last Ledger", region: 'gravewick', body:
+`Intake, Hallow's Eve. The boy from the Bellweather plot.
+No pulse I could find. No pulse the doctor could find.
+And yet when I closed the lid he knocked. Three times. Polite.
+The director says fill the order regardless. The order is thirteen.
+We are at twelve.
+
+— if you are reading this, I am sorry. You are the thirteenth.` },
+
+  { x: -70, z: 70, title: 'Bellweather Family Journal', region: 'gravewick', body:
+`We could not let the chair stay empty.
+Mother set a place for him every supper, and one by one
+the guests we invited took his sickness and his silence
+and his seat — and gave us back one more night of "almost."
+Twelve guests. Twelve silhouettes of ash.
+The thirteenth chair is yours, traveler. Don't sit down.` },
+
+  { x: 26, z: -18, title: 'Town Notice — Pinned to a Door', region: 'gravewick', body:
+`BY ORDER OF THE COUNTY:
+Doors are to be answered before the bell tolls thirteen.
+Candy is to be kept by every hearth.
+The Trick-or-Treater is owed. The Trick-or-Treater remembers.
+Do NOT refuse the child with no shadow.` },
+
+  { x: 320, z: -120, title: 'Marrowbarn Farm — Soil Survey', region: 'jackfield', body:
+`The pumpkins came up wrong this loop. Faces already carved
+from the inside. Hired men say some faces match folks we buried.
+Burned a field of them. They screamed like kettles.
+Marrow Jack stood at the tree-line and watched us do it.
+He has not moved in three days. He is waiting for the harvest.` },
+
+  { x: 520, z: -300, title: 'A Banishment, Half-Remembered', region: 'thousand', body:
+`The old farmhands knew his true name, and a name is a leash.
+Speak it at the heart of the Thousand-Jack and the Stitched King
+must kneel. Fire works too, they said, but fire makes more of him.
+The name is written nowhere safe. It is written where he can't read:
+on the underside of every porch pumpkin in Gravewick.` },
+
+  { x: -300, z: 180, title: "Old Mother Grin's Recipe", region: 'mournwood', body:
+`Take one bad dream, still warm.
+Fold in the guilt of the dreamer. Bake until the house forgets
+it was ever a person. Serve to anyone who knocks.
+I have been baking two hundred years. I have never gone hungry.
+You smell like a long pig who fired a silver gun. Come in, come in.` },
+
+  { x: 60, z: 360, title: 'Drowned Mercy — Last Census', region: 'gallowsfen', body:
+`The water rose the night of the First Harvest and never went down.
+We climbed to the steeples. We are still up here.
+If your lantern is lit you can see us waving.
+Please wave back. It has been so long since anyone waved back.` },
+
+  { x: -320, z: -260, title: 'Ashfall Works — Shift Log', region: 'ashfall', body:
+`Night shift sealed in per the owner's instruction.
+"For their safety," he wrote, "until the festival passes."
+The festival has not passed. It has never passed.
+The line still runs. We still clock in. We are owed back pay
+of seventy-three Octobers. We intend to collect.` },
+];
+
+// Loot — named pickups that grant perks/stats.
+export const LOOT = [
+  { x: 6, z: -2, kind: 'lantern_lit', title: 'The lantern stirs',
+    body: 'Press F to wake the cold moon inside it.', icon: 0xffa64d },
+  { x: 30, z: 12, title: "The Gravedigger's Argument", body: '+Grit. A shovel that hates the risen.',
+    icon: 0x8a8a90, grant: () => ({ stat: 'grit', amount: 2 }) },
+  { x: -28, z: 18, title: 'Salt Shells (a handful)', body: 'Your revolver bites ghosts harder now.',
+    icon: 0xe8e2d0, grant: () => ({ ammo: true }) },
+  { x: 320, z: -120, title: 'The Jackknife', body: '+Guile. Pumpkin-stem and black iron.',
+    icon: 0xff7a18, grant: () => ({ stat: 'guile', amount: 2 }) },
+  { x: -300, z: 180, title: 'Forbidden Harvestcraft Page', body: '+Hex. Your witchfire burns greener.',
+    icon: 0x8dff6a, grant: () => ({ stat: 'hex', amount: 3 }) },
+];
+
+export class Items {
+  constructor(scene, world, player, audio, quests) {
+    this.scene = scene;
+    this.world = world;
+    this.player = player;
+    this.audio = audio;
+    this.quests = quests;
+    this.interactables = [];
+    this.reading = false;
+    this._build();
+  }
+
+  _build() {
+    for (const n of NOTES) this._spawnNote(n);
+    for (const l of LOOT) this._spawnLoot(l);
+  }
+
+  _spawnNote(n) {
+    const grp = new THREE.Group();
+    const paper = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.4, 0.5),
+      new THREE.MeshStandardMaterial({ color: 0xd8c89a, emissive: 0x4a3c1c, emissiveIntensity: 0.4, side: THREE.DoubleSide })
+    );
+    paper.rotation.x = -Math.PI / 2.2; grp.add(paper);
+    const glow = new THREE.PointLight(0xffd070, 0.5, 4, 2); glow.position.y = 0.4; grp.add(glow);
+    this.world.placeOnGround(grp, n.x + 1.5, n.z + 1.5, 0.9);
+    this.scene.add(grp);
+    this.interactables.push({
+      pos: grp.position, label: 'read', radius: 3, kind: 'note', data: n, obj: grp, used: false,
+      bob: Math.random() * 6,
+    });
+  }
+
+  _spawnLoot(l) {
+    const grp = new THREE.Group();
+    const mesh = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.28, 0),
+      new THREE.MeshStandardMaterial({ color: l.icon, emissive: l.icon, emissiveIntensity: 0.5, metalness: 0.4, roughness: 0.4 })
+    );
+    mesh.position.y = 0.2; grp.add(mesh);
+    const glow = new THREE.PointLight(l.icon, 0.8, 5, 2); glow.position.y = 0.3; grp.add(glow);
+    this.world.placeOnGround(grp, l.x, l.z, 1.0);
+    this.scene.add(grp);
+    this.interactables.push({
+      pos: grp.position, label: 'take', radius: 2.8, kind: 'loot', data: l, obj: grp, mesh, used: false,
+      bob: Math.random() * 6,
+    });
+  }
+
+  // returns the nearest usable interactable in range (for the HUD prompt)
+  nearest() {
+    if (this.reading) return null;
+    const p = this.player.pos;
+    let best = null, bestD = Infinity;
+    for (const it of this.interactables) {
+      if (it.used && it.kind === 'loot') continue;
+      const d = dist2D(p.x, p.z, it.pos.x, it.pos.z);
+      if (d < it.radius && d < bestD) { bestD = d; best = it; }
+    }
+    return best;
+  }
+
+  interact(it) {
+    if (!it) return;
+    if (it.kind === 'note') {
+      this._openReader(it.data.title, it.data.body);
+      this.quests?.onNoteRead(it.data);
+      if (!it.used) { it.used = true; this.player.addXP(8); }
+    } else if (it.kind === 'loot') {
+      this._takeLoot(it);
+    }
+  }
+
+  _takeLoot(it) {
+    const l = it.data;
+    it.used = true;
+    this.scene.remove(it.obj);
+    this.audio.pickup();
+    if (l.kind === 'lantern_lit') {
+      showToast('You found your own lantern arm. Press F.');
+    } else if (l.grant) {
+      const g = l.grant();
+      if (g.stat) { this.player.stats[g.stat] += g.amount; showToast(`${l.title} — +${g.amount} ${g.stat.toUpperCase()}`); }
+      if (g.ammo) { this.player.weaponsRef && (this.player.weaponsRef.ammoMax += 0); showToast(l.title); }
+    } else showToast(l.title);
+    this.quests?.onLoot(l);
+  }
+
+  _openReader(title, body) {
+    this.reading = true;
+    document.getElementById('reader-title').textContent = title;
+    document.getElementById('reader-body').textContent = body;
+    document.getElementById('reader').classList.remove('hidden');
+    if (document.pointerLockElement) document.exitPointerLock();
+  }
+  closeReader() {
+    this.reading = false;
+    document.getElementById('reader').classList.add('hidden');
+  }
+
+  update(dt) {
+    for (const it of this.interactables) {
+      if (it.used && it.kind === 'loot') continue;
+      it.bob += dt;
+      it.obj.position.y = this.world.getHeight(it.pos.x, it.pos.z) + (it.kind === 'loot' ? 1.0 : 0.9) + Math.sin(it.bob * 2) * 0.12;
+      if (it.mesh) it.mesh.rotation.y += dt * 1.5;
+    }
+  }
+}

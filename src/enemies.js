@@ -1,0 +1,489 @@
+// ============================================================
+// enemies.js — the Halloween bestiary + their AI, and the giant
+// scarecrow boss Marrow Jack. State-machine driven, terrain-aware.
+//
+//  Scarecrow  — freezes when watched, sprints when unseen.
+//  Jackling   — fast little pumpkin-headed swarm.
+//  Ghost      — only harmed by the lantern's light, witchfire, or flare.
+//  Marrow Jack— three-phase field boss with adds & pumpkin bombs.
+// ============================================================
+import * as THREE from 'three';
+import { dist2D, clamp, randRange, TAU, showToast, whisper } from './utils.js';
+
+let _eid = 0;
+
+export class Enemies {
+  constructor(scene, world, player, audio) {
+    this.scene = scene;
+    this.world = world;
+    this.player = player;
+    this.audio = audio;
+    this.list = [];
+    this.hitMeshes = [];      // flat list for raycasting
+    this.spawnCd = 2;
+    this.maxAmbient = 14;
+    this.boss = null;
+    this.bossTriggered = false;
+    this.kills = 0;
+    this._camForward = new THREE.Vector3();
+  }
+
+  // ---------- factory ----------
+  _register(e) {
+    e.id = _eid++;
+    this.list.push(e);
+    e.group.traverse(o => { if (o.isMesh) { o.userData.enemy = e; this.hitMeshes.push(o); } });
+    this.scene.add(e.group);
+    return e;
+  }
+  _deregister(e) {
+    this.scene.remove(e.group);
+    e.group.traverse(o => {
+      const i = this.hitMeshes.indexOf(o);
+      if (i >= 0) this.hitMeshes.splice(i, 1);
+      if (o.isMesh) { o.geometry.dispose?.(); }
+    });
+    const li = this.list.indexOf(e);
+    if (li >= 0) this.list.splice(li, 1);
+  }
+
+  spawnScarecrow(x, z) {
+    const g = new THREE.Group();
+    const strawMat = new THREE.MeshStandardMaterial({ color: 0x7a5e26, roughness: 1, flatShading: true });
+    const clothMat = new THREE.MeshStandardMaterial({ color: 0x40301a, roughness: 1 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.18, 1.3, 8), clothMat);
+    body.position.y = 1.5; body.castShadow = true; g.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 8), strawMat);
+    head.position.y = 2.35; head.scale.y = 1.15; head.castShadow = true; g.add(head);
+    // glowing stitched eyes
+    const em = new THREE.MeshBasicMaterial({ color: 0xff5a18 });
+    const e1 = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), em); e1.position.set(-0.11, 2.38, 0.25); g.add(e1);
+    const e2 = e1.clone(); e2.position.x = 0.11; g.add(e2);
+    // outstretched arms
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.05, 1.4, 6), strawMat);
+    arm.rotation.z = Math.PI / 2; arm.position.y = 1.95; g.add(arm);
+    const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.08, 1.0, 6), clothMat);
+    legs.position.y = 0.5; g.add(legs);
+
+    g.position.set(x, this.world.getHeight(x, z), z);
+    return this._register({
+      type: 'scarecrow', group: g, head,
+      hp: 55, maxHp: 55, speed: 7.2, dmg: 14, atkCd: 0, atkRange: 2.4,
+      state: 'hunt', stagger: 0, dead: false, dyingT: 0, watched: false,
+      resist: { silver: 1, witchfire: 1.8 }, dread: 0.2, xp: 22,
+    });
+  }
+
+  spawnJackling(x, z) {
+    const g = new THREE.Group();
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8),
+      new THREE.MeshStandardMaterial({ color: 0xd2691e, roughness: 0.7, emissive: 0x3a1400, emissiveIntensity: 0.6 }));
+    head.scale.y = 0.85; head.castShadow = true; g.add(head);
+    const fm = new THREE.MeshBasicMaterial({ color: 0xffae3b });
+    const eye = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.1, 3), fm);
+    eye.rotation.x = Math.PI / 2; eye.position.set(-0.12, 0.05, 0.28); g.add(eye);
+    const eye2 = eye.clone(); eye2.position.x = 0.12; g.add(eye2);
+    // little vine legs
+    const body = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.5, 6),
+      new THREE.MeshStandardMaterial({ color: 0x2e3d18, roughness: 1 }));
+    body.position.y = -0.4; body.rotation.x = Math.PI; g.add(body);
+    const light = new THREE.PointLight(0xff7a1e, 0.5, 4, 2); g.add(light);
+
+    g.position.set(x, this.world.getHeight(x, z) + 0.9, z);
+    return this._register({
+      type: 'jackling', group: g, head,
+      hp: 22, maxHp: 22, speed: 8.6, dmg: 8, atkCd: 0, atkRange: 1.8,
+      state: 'hunt', stagger: 0, dead: false, dyingT: 0, hover: 0.9,
+      resist: { silver: 1, witchfire: 1.4 }, dread: 0.1, xp: 10,
+    });
+  }
+
+  spawnGhost(x, z) {
+    const g = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xbfe0ff, transparent: true, opacity: 0.32, emissive: 0x335577,
+      emissiveIntensity: 0.6, depthWrite: false,
+    });
+    const body = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.8, 10, 1, true), mat);
+    body.position.y = 1.4; g.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 10), mat);
+    head.position.y = 2.1; g.add(head);
+    const em = new THREE.MeshBasicMaterial({ color: 0x113344 });
+    const e1 = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), em); e1.position.set(-0.1, 2.12, 0.26); g.add(e1);
+    const e2 = e1.clone(); e2.position.x = 0.1; g.add(e2);
+
+    g.position.set(x, this.world.getHeight(x, z), z);
+    return this._register({
+      type: 'ghost', group: g, head, mat,
+      hp: 48, maxHp: 48, speed: 4.4, dmg: 12, atkCd: 0, atkRange: 2.6,
+      state: 'hunt', stagger: 0, dead: false, dyingT: 0, phaseT: Math.random() * TAU,
+      resist: { silver: 0.04, witchfire: 1.6 }, dread: 0.5, xp: 26, vulnerable: false,
+    });
+  }
+
+  // ---------- boss ----------
+  spawnBoss(x, z) {
+    if (this.boss) return;
+    const g = new THREE.Group();
+    const beam = new THREE.MeshStandardMaterial({ color: 0x33240f, roughness: 1, flatShading: true });
+    const cloth = new THREE.MeshStandardMaterial({ color: 0x271a0c, roughness: 1 });
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 0.9, 5, 8), cloth);
+    torso.position.y = 5; torso.castShadow = true; g.add(torso);
+    // dozens of burning pumpkins clustered as the head
+    const headGrp = new THREE.Group(); headGrp.position.y = 8.4; g.add(headGrp);
+    for (let i = 0; i < 10; i++) {
+      const p = new THREE.Mesh(new THREE.SphereGeometry(randRange(Math.random, 0.4, 0.8), 8, 8),
+        new THREE.MeshStandardMaterial({ color: 0xd2691e, emissive: 0x4a1800, emissiveIntensity: 0.8, roughness: 0.7 }));
+      p.position.set((Math.random()-0.5)*1.8, (Math.random()-0.5)*1.8, (Math.random()-0.5)*1.8);
+      headGrp.add(p);
+    }
+    const hl = new THREE.PointLight(0xff5a1e, 2.5, 30, 2); hl.position.y = 8.4; g.add(hl);
+    // crossbeam arms
+    const arms = new THREE.Mesh(new THREE.BoxGeometry(8, 0.4, 0.4), beam);
+    arms.position.y = 6.5; g.add(arms);
+    // scythe
+    const scythe = new THREE.Mesh(new THREE.BoxGeometry(0.2, 4, 0.2), beam);
+    scythe.position.set(4, 5, 0); g.add(scythe);
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.3, 0.1),
+      new THREE.MeshStandardMaterial({ color: 0x8a8a90, metalness: 0.7, roughness: 0.4 }));
+    blade.position.set(4 - 1, 7, 0); g.add(blade);
+
+    g.position.set(x, this.world.getHeight(x, z), z);
+    g.scale.setScalar(1.6);
+    const boss = this._register({
+      type: 'boss', group: g, headGrp,
+      hp: 900, maxHp: 900, speed: 3.2, dmg: 34, atkCd: 0, atkRange: 7,
+      state: 'hunt', stagger: 0, dead: false, dyingT: 0, phase: 1,
+      resist: { silver: 0.7, witchfire: 1.5 }, dread: 0, xp: 600, isBoss: true,
+      addCd: 5, bombCd: 4,
+    });
+    this.boss = boss;
+    this.bossTriggered = true;
+    this._showBossBar();
+    this.audio.bossRoar();
+    showToast('MARROW JACK — Stitched King of the Thousand-Jack');
+    whisper('learn its name, or burn it down');
+    return boss;
+  }
+
+  _showBossBar() {
+    let bar = document.getElementById('boss-bar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'boss-bar';
+      bar.innerHTML = `<div id="boss-name">MARROW JACK</div><div id="boss-track"><div id="boss-fill"></div></div>`;
+      Object.assign(bar.style, {
+        position: 'fixed', left: '50%', bottom: '7%', transform: 'translateX(-50%)',
+        width: '46%', textAlign: 'center', zIndex: 12, pointerEvents: 'none',
+      });
+      document.getElementById('hud').appendChild(bar);
+      const nm = bar.querySelector('#boss-name');
+      Object.assign(nm.style, { color: '#ff7a18', letterSpacing: '6px', fontSize: '15px', textShadow: '0 0 12px #802500' });
+      const tr = bar.querySelector('#boss-track');
+      Object.assign(tr.style, { height: '12px', marginTop: '5px', background: 'rgba(0,0,0,.6)', border: '1px solid #b6202a', borderRadius: '2px', overflow: 'hidden' });
+      const fl = bar.querySelector('#boss-fill');
+      Object.assign(fl.style, { height: '100%', width: '100%', background: 'linear-gradient(90deg,#7a0d12,#ff5a1e)' });
+    }
+    bar.style.display = 'block';
+  }
+  _hideBossBar() { const b = document.getElementById('boss-bar'); if (b) b.style.display = 'none'; }
+
+  // ---------- combat hooks (called by weapons.js) ----------
+  raycastHit(raycaster) {
+    const hits = raycaster.intersectObjects(this.hitMeshes, false);
+    for (const h of hits) {
+      const e = h.object.userData.enemy;
+      if (e && !e.dead) return { enemy: e, point: h.point };
+    }
+    return null;
+  }
+  boltHit(pos, radius) {
+    for (const e of this.list) {
+      if (e.dead) continue;
+      const c = e.group.position;
+      const dy = e.type === 'jackling' ? 0.9 : 1.4;
+      if (dist2D(pos.x, pos.z, c.x, c.z) < radius + (e.isBoss ? 3 : 0.6) &&
+          Math.abs(pos.y - (c.y + dy)) < (e.isBoss ? 6 : 1.6)) return e;
+    }
+    return null;
+  }
+
+  applyDamage(e, dmg, point, type, crit) {
+    if (e.dead) return;
+    // ghosts shrug off lead unless lit by the lantern's sight
+    if (e.type === 'ghost' && type === 'silver' && !e.vulnerable) {
+      showToast('Lead passes through. Light it, or use witchfire.');
+      return;
+    }
+    const mult = e.resist?.[type] ?? 1;
+    e.hp -= dmg * mult;
+    e.stagger = Math.min(0.35, 0.12 + dmg * 0.003);
+    this.audio.thud(e.type === 'jackling' ? 140 : 90);
+    this._spawnHitFx(point ?? e.group.position, type);
+    if (e.isBoss) this._updateBossBar();
+    if (e.hp <= 0) this._kill(e);
+  }
+
+  _kill(e) {
+    e.dead = true; e.dyingT = e.isBoss ? 2.4 : 0.6; e.state = 'die';
+    this.kills++;
+    this.player.addXP(e.xp);
+    if (e.isBoss) {
+      this._hideBossBar();
+      showToast('Marrow Jack falls. The field exhales.');
+      whisper('the first bell is silenced');
+      this.audio.bell(180);
+      this.player.relieveDread(30);
+      if (this.onBossDefeated) this.onBossDefeated();
+    }
+  }
+
+  _spawnHitFx(pos, type) {
+    const col = type === 'witchfire' ? 0x9dff6a : 0xffcaa0;
+    const N = 6;
+    const geo = new THREE.BufferGeometry();
+    const arr = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) { arr[i*3] = pos.x; arr[i*3+1] = pos.y; arr[i*3+2] = pos.z; }
+    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: col, size: 0.15, transparent: true, opacity: 1 }));
+    pts.userData.vel = [];
+    for (let i = 0; i < N; i++) pts.userData.vel.push(new THREE.Vector3((Math.random()-0.5)*4, Math.random()*4, (Math.random()-0.5)*4));
+    pts.userData.life = 0.5;
+    this.scene.add(pts);
+    (this._fx ||= []).push(pts);
+  }
+
+  // Lantern Flare AoE — stuns, reveals ghosts, kills weak adds.
+  flareBurst(center, radius) {
+    for (const e of this.list) {
+      if (e.dead) continue;
+      const d = dist2D(center.x, center.z, e.group.position.x, e.group.position.z);
+      if (d < radius) {
+        e.stagger = 1.4;
+        if (e.type === 'ghost') { e.vulnerable = true; e.vulnTimer = 6; this.applyDamage(e, 30, e.group.position, 'witchfire', false); }
+        else if (e.type === 'jackling') this.applyDamage(e, 30, e.group.position, 'witchfire', false);
+        else this.applyDamage(e, 14, e.group.position, 'witchfire', false);
+      }
+    }
+  }
+
+  // ---------- per-frame ----------
+  update(dt) {
+    const p = this.player.pos;
+    this.camera = this.player.camera;
+    this.player.camera.getWorldDirection(this._camForward);
+
+    // boss trigger
+    if (!this.bossTriggered && this.world.bossArena) {
+      const a = this.world.bossArena;
+      if (dist2D(p.x, p.z, a.x, a.z) < a.r) this.spawnBoss(a.x, a.z);
+    }
+
+    // ambient spawns
+    this._ambientSpawn(dt);
+
+    let nearDread = 0;
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const e = this.list[i];
+      this._think(e, dt, p);
+      const d = dist2D(p.x, p.z, e.group.position.x, e.group.position.z);
+      if (!e.dead && d < 14) nearDread += e.dread * (1 - d / 14);
+      // despawn far ambient (not boss)
+      if (!e.isBoss && !e.dead && d > 130) this._deregister(e);
+    }
+    // proximity feeds Dread
+    if (nearDread > 0) this.player.addDread(nearDread * dt * 6);
+
+    // hit fx
+    if (this._fx) {
+      for (let i = this._fx.length - 1; i >= 0; i--) {
+        const f = this._fx[i]; f.userData.life -= dt;
+        const pos = f.geometry.attributes.position;
+        for (let k = 0; k < pos.count; k++) {
+          const v = f.userData.vel[k];
+          pos.setXYZ(k, pos.getX(k) + v.x * dt, pos.getY(k) + v.y * dt, pos.getZ(k) + v.z * dt);
+          v.y -= 9 * dt;
+        }
+        pos.needsUpdate = true;
+        f.material.opacity = Math.max(0, f.userData.life * 2);
+        if (f.userData.life <= 0) { this.scene.remove(f); f.geometry.dispose(); this._fx.splice(i, 1); }
+      }
+    }
+  }
+
+  _ambientSpawn(dt) {
+    this.spawnCd -= dt;
+    const alive = this.list.filter(e => !e.dead && !e.isBoss).length;
+    if (this.spawnCd > 0 || alive >= this.maxAmbient) return;
+    this.spawnCd = randRange(Math.random, 1.6, 3.4);
+    const p = this.player.pos;
+    const reg = this.world.regionAt(p.x, p.z);
+    // spawn just out of comfortable view
+    const a = Math.random() * TAU, r = randRange(Math.random, 34, 52);
+    const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
+    if (dist2D(x, z, 0, 0) < 30) return; // keep spawn town calmer at the well
+
+    const roll = Math.random();
+    if (reg.id === 'gallowsfen' || reg.id === 'mournwood') {
+      if (roll < 0.5) this.spawnGhost(x, z);
+      else if (roll < 0.8) this.spawnScarecrow(x, z);
+      else this.spawnJackling(x, z);
+    } else if (reg.id === 'jackfield' || reg.id === 'thousand') {
+      if (roll < 0.5) this.spawnScarecrow(x, z);
+      else if (roll < 0.85) this.spawnJackling(x, z);
+      else this.spawnGhost(x, z);
+    } else {
+      if (roll < 0.4) this.spawnScarecrow(x, z);
+      else if (roll < 0.7) this.spawnJackling(x, z);
+      else this.spawnGhost(x, z);
+    }
+  }
+
+  _isWatched(e) {
+    // angle between camera forward and direction to enemy
+    const c = e.group.position;
+    const toE = new THREE.Vector3(c.x - this.player.pos.x, 0, c.z - this.player.pos.z).normalize();
+    const fwd = new THREE.Vector3(this._camForward.x, 0, this._camForward.z).normalize();
+    return toE.dot(fwd) > 0.5;
+  }
+
+  _faceAndStep(e, dt, p, stop = false) {
+    const c = e.group.position;
+    const dx = p.x - c.x, dz = p.z - c.z;
+    const d = Math.hypot(dx, dz) || 1;
+    e.group.rotation.y = Math.atan2(dx, dz);
+    if (!stop && d > e.atkRange * 0.8) {
+      const sp = e.speed * (e.stagger > 0 ? 0.3 : 1) * dt;
+      const step = Math.min(sp, d - e.atkRange * 0.7);
+      c.x += (dx / d) * step;
+      c.z += (dz / d) * step;
+    }
+    return d;
+  }
+
+  _think(e, dt, p) {
+    e.stagger = Math.max(0, e.stagger - dt);
+    if (e.vulnTimer) { e.vulnTimer -= dt; if (e.vulnTimer <= 0) e.vulnerable = false; }
+
+    if (e.state === 'die') {
+      e.dyingT -= dt;
+      e.group.position.y -= dt * (e.isBoss ? 1.5 : 2.5);
+      e.group.rotation.z += dt * 2;
+      e.group.scale.multiplyScalar(1 - dt * (e.isBoss ? 0.4 : 1.2));
+      if (e.dyingT <= 0) this._deregister(e);
+      return;
+    }
+
+    // keep grounded
+    const gy = this.world.getHeight(e.group.position.x, e.group.position.z);
+
+    if (e.type === 'scarecrow') {
+      const watched = this._isWatched(e);
+      const d = dist2D(p.x, p.z, e.group.position.x, e.group.position.z);
+      // freeze when watched (unless adjacent — then it lunges)
+      const adjacent = d < e.atkRange + 0.5;
+      this._faceAndStep(e, dt, p, watched && !adjacent || e.stagger > 0);
+      e.group.position.y = gy;
+      // twitchy head tilt
+      e.head.rotation.z = Math.sin(performance.now() * 0.005 + e.id) * 0.25;
+      this._tryAttack(e, dt, p, d, watched ? 0 : 0);
+    }
+    else if (e.type === 'jackling') {
+      const d = this._faceAndStep(e, dt, p, e.stagger > 0);
+      e.group.position.y = gy + e.hover + Math.sin(performance.now() * 0.008 + e.id) * 0.18;
+      this._tryAttack(e, dt, p, d);
+    }
+    else if (e.type === 'ghost') {
+      e.phaseT += dt;
+      // ghosts drift, fade in/out; only solid (vulnerable) when in lantern light
+      const litBySight = this.player.lanternOn &&
+        dist2D(p.x, p.z, e.group.position.x, e.group.position.z) < 12 && this._isWatched(e);
+      if (litBySight) { e.vulnerable = true; e.vulnTimer = 0.5; }
+      e.mat.opacity = e.vulnerable ? 0.7 : 0.22 + Math.sin(e.phaseT * 2) * 0.08;
+      const d = this._faceAndStep(e, dt, p, e.stagger > 0);
+      e.group.position.y = gy + Math.sin(e.phaseT) * 0.3 + 0.2;
+      this._tryAttack(e, dt, p, d);
+    }
+    else if (e.type === 'boss') {
+      this._bossThink(e, dt, p, gy);
+    }
+  }
+
+  _tryAttack(e, dt, p, d) {
+    e.atkCd = Math.max(0, e.atkCd - dt);
+    if (d <= e.atkRange && e.atkCd <= 0 && e.stagger <= 0) {
+      e.atkCd = 1.4;
+      this.player.damage(e.dmg, e.type);
+      // little lunge
+      const dir = new THREE.Vector3(p.x - e.group.position.x, 0, p.z - e.group.position.z).normalize();
+      e.group.position.x += dir.x * 0.3; e.group.position.z += dir.z * 0.3;
+    }
+  }
+
+  _bossThink(e, dt, p, gy) {
+    e.group.position.y = gy;
+    const d = this._faceAndStep(e, dt, p, e.stagger > 0);
+    e.group.rotation.y = Math.atan2(p.x - e.group.position.x, p.z - e.group.position.z);
+    e.headGrp.rotation.y += dt * 0.6;
+
+    // phase transitions
+    const frac = e.hp / e.maxHp;
+    if (frac < 0.66 && e.phase === 1) { e.phase = 2; this.audio.bossRoar(); whisper('it plants the field with fire'); }
+    if (frac < 0.33 && e.phase === 2) { e.phase = 3; this.audio.bossRoar(); whisper('the root-heart shrieks'); e.speed = 4.5; }
+
+    // melee scythe sweep
+    this._tryAttack(e, dt, p, d);
+
+    // spawn adds (crows = jacklings)
+    e.addCd -= dt;
+    if (e.addCd <= 0 && e.phase >= 1) {
+      e.addCd = e.phase >= 3 ? 4 : 6;
+      const alive = this.list.filter(x => !x.dead && x.type === 'jackling').length;
+      if (alive < 8) {
+        const a = Math.random() * TAU;
+        this.spawnJackling(e.group.position.x + Math.cos(a) * 4, e.group.position.z + Math.sin(a) * 4);
+      }
+    }
+
+    // pumpkin bombs in phase 2+
+    if (e.phase >= 2) {
+      e.bombCd -= dt;
+      if (e.bombCd <= 0) {
+        e.bombCd = e.phase >= 3 ? 2.2 : 3.4;
+        this._pumpkinBomb(p.x + randRange(Math.random,-4,4), p.z + randRange(Math.random,-4,4));
+      }
+    }
+  }
+
+  _pumpkinBomb(x, z) {
+    const y = this.world.getHeight(x, z);
+    const warn = new THREE.Mesh(new THREE.RingGeometry(1.4, 1.7, 20),
+      new THREE.MeshBasicMaterial({ color: 0xff3a10, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
+    warn.rotation.x = -Math.PI / 2; warn.position.set(x, y + 0.1, z);
+    this.scene.add(warn);
+    const bomb = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8),
+      new THREE.MeshStandardMaterial({ color: 0xd2691e, emissive: 0x661a00, emissiveIntensity: 1 }));
+    bomb.position.set(x, y + 6, z); this.scene.add(bomb);
+    const start = performance.now();
+    const tick = () => {
+      const t = (performance.now() - start) / 1000;
+      bomb.position.y = y + 6 - t * t * 9;
+      warn.material.opacity = 0.4 + Math.abs(Math.sin(t * 10)) * 0.5;
+      if (bomb.position.y <= y + 0.4) {
+        // detonate
+        this.scene.remove(bomb); this.scene.remove(warn);
+        bomb.geometry.dispose(); warn.geometry.dispose();
+        this.audio.thud(60); this.audio.bossRoar();
+        if (dist2D(this.player.pos.x, this.player.pos.z, x, z) < 2.4) this.player.damage(22, 'pumpkin');
+        return;
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  _updateBossBar() {
+    const fl = document.getElementById('boss-fill');
+    if (fl && this.boss) fl.style.width = `${clamp(this.boss.hp / this.boss.maxHp, 0, 1) * 100}%`;
+  }
+}

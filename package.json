@@ -1,0 +1,12 @@
+{
+  "name": "hallowind",
+  "version": "0.1.0",
+  "private": true,
+  "description": "HALLOWIND — a Bethesda-style open-world Halloween-horror RPG FPS, in the browser.",
+  "type": "module",
+  "scripts": {
+    "start": "node serve.mjs",
+    "serve": "node serve.mjs"
+  },
+  "engines": { "node": ">=18" }
+}

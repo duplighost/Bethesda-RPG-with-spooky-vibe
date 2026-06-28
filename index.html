@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HALLOWIND — An Open-World Halloween Horror RPG</title>
+<link rel="icon" href="data:image/svg+xml,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'&gt;&lt;text y='14' font-size='14'&gt;🎃&lt;/text&gt;&lt;/svg&gt;" />
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <!-- ============ CANVAS ============ -->
+  <canvas id="game"></canvas>
+
+  <!-- ============ HUD ============ -->
+  <div id="hud" class="hidden">
+    <div id="crosshair">
+      <span class="ch ch-t"></span><span class="ch ch-b"></span>
+      <span class="ch ch-l"></span><span class="ch ch-r"></span>
+      <span id="hitmarker"></span>
+    </div>
+
+    <div id="vignette"></div>
+    <div id="dread-overlay"></div>
+    <div id="flash"></div>
+
+    <div id="topleft">
+      <div class="bar-row"><span class="bar-label">V<span class="u">I</span>TAL</span>
+        <div class="bar"><div id="health-fill" class="fill health"></div></div></div>
+      <div class="bar-row"><span class="bar-label">W<span class="u">I</span>SP</span>
+        <div class="bar"><div id="wisp-fill" class="fill wisp"></div></div></div>
+      <div class="bar-row"><span class="bar-label">DR<span class="u">E</span>AD</span>
+        <div class="bar dread"><div id="dread-fill" class="fill dread"></div></div></div>
+    </div>
+
+    <div id="topright">
+      <div id="region-name">GRAVEWICK</div>
+      <div id="clock">11:54 PM · Hallow's Eve</div>
+      <div id="level">Wickmarked · Lv 1</div>
+    </div>
+
+    <div id="objective">
+      <div class="obj-head">◈ OBJECTIVE</div>
+      <div id="objective-text">Wake.</div>
+    </div>
+
+    <div id="weapon-readout">
+      <div id="weapon-name">IRON LANTERN</div>
+      <div id="ammo"><span id="ammo-cur">—</span><span id="ammo-sep"></span><span id="ammo-max"></span></div>
+      <div id="lantern-state">LANTERN: <b id="lantern-on">DIM</b></div>
+    </div>
+
+    <div id="whisper"></div>
+    <div id="toast"></div>
+
+    <div id="prompt"><span class="key">E</span> <span id="prompt-text">interact</span></div>
+
+    <div id="compass"><div id="compass-needle">▲</div></div>
+  </div>
+
+  <!-- ============ READER (notes / journals) ============ -->
+  <div id="reader" class="overlay hidden">
+    <div class="reader-paper">
+      <h2 id="reader-title">A Torn Page</h2>
+      <div id="reader-body"></div>
+      <div class="reader-foot">[ <span class="key">E</span> / <span class="key">ESC</span> to set it down ]</div>
+    </div>
+  </div>
+
+  <!-- ============ INTRO ============ -->
+  <div id="intro" class="overlay">
+    <div id="intro-inner">
+      <pre id="intro-lines"></pre>
+      <h1 id="title-card" class="hidden">HALLOWIND</h1>
+      <p id="title-sub" class="hidden">Hallow County · The Long October</p>
+      <button id="begin" class="hidden">DESCEND</button>
+      <div id="controls-hint" class="hidden">
+        <b>WASD</b> move · <b>MOUSE</b> look · <b>SHIFT</b> sprint · <b>SPACE</b> jump<br/>
+        <b>LMB</b> fire · <b>RMB</b> cast spell · <b>F</b> lantern · <b>Q</b> Lantern&nbsp;Flare<br/>
+        <b>1/2/3</b> select arm · <b>R</b> reload · <b>E</b> interact · <b>TAB</b> map · <b>ESC</b> release cursor
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DEATH ============ -->
+  <div id="death" class="overlay hidden">
+    <div>
+      <h1 id="death-title">YOU ARE NOT DONE YET</h1>
+      <p id="death-sub">The lantern gutters. October pulls you back.</p>
+      <button id="respawn">RISE AGAIN</button>
+    </div>
+  </div>
+
+  <!-- ============ MAP ============ -->
+  <div id="map" class="overlay hidden">
+    <div id="map-inner">
+      <h2>HALLOW COUNTY</h2>
+      <canvas id="map-canvas" width="640" height="640"></canvas>
+      <div class="reader-foot">[ <span class="key">TAB</span> to close ]</div>
+    </div>
+  </div>
+
+  <div id="loading">Summoning Hallow County…<span id="loading-sub"></span></div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three.module.js"
+    }
+  }
+  </script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
