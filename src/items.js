@@ -127,7 +127,7 @@ export class Items {
     this.scene.add(grp);
     this.interactables.push({
       pos: grp.position, label: 'read', radius: 3, kind: 'note', data: n, obj: grp, used: false,
-      bob: Math.random() * 6,
+      bob: Math.random() * 6, glow,
     });
   }
 
@@ -256,21 +256,27 @@ export class Items {
       it.obj.position.y = this.world.getHeight(it.pos.x, it.pos.z) + (it.kind === 'loot' ? 1.0 : 0.9) + Math.sin(it.bob * 2) * 0.12;
       if (it.mesh) it.mesh.rotation.y += dt * 1.5;
 
-      // proximity glint for relics: faint glimmer far off, a gentle pulse up close
-      if (it.relic) {
+      // proximity glint: faint glimmer far off, kindling as the player draws near.
+      // Relics get the full treatment (rising shimmer + brightening gem); lore
+      // notes get a gentler glow that dims once read, so unread lore stands out.
+      if (it.glow && (it.relic || it.kind === 'note')) {
         const d = dist2D(pp.x, pp.z, it.pos.x, it.pos.z);
         const near = clamp(1 - d / 46, 0, 1);           // 1 at touch → 0 by ~46 units
         const pulse = 0.78 + 0.22 * Math.sin(it.bob * 3);
-        if (it.glow) {
+        if (it.relic) {
           it.glow.material.opacity = (0.14 + near * 0.72) * pulse;
           it.glow.scale.setScalar(1.5 + near * 1.1);
+          if (it.glint) {
+            it.glint.material.opacity = near * near * 0.6 * pulse;   // a rising shimmer, only when close
+            it.glint.scale.setScalar(0.4 + near * 0.7);
+            it.glint.position.y = 1.0 + Math.sin(it.bob * 2.2) * 0.3 + near * 0.6;
+          }
+          if (it.mesh && it.mesh.material) it.mesh.material.emissiveIntensity = 0.45 + near * 0.9;
+        } else {
+          const readDim = it.used ? 0.32 : 1;            // already-read notes fade back
+          it.glow.material.opacity = (0.1 + near * 0.4) * pulse * readDim;
+          it.glow.scale.setScalar(1.2 + near * 0.5);
         }
-        if (it.glint) {
-          it.glint.material.opacity = near * near * 0.6 * pulse;   // a rising shimmer, only when close
-          it.glint.scale.setScalar(0.4 + near * 0.7);
-          it.glint.position.y = 1.0 + Math.sin(it.bob * 2.2) * 0.3 + near * 0.6;
-        }
-        if (it.mesh && it.mesh.material) it.mesh.material.emissiveIntensity = 0.45 + near * 0.9;
       }
     }
   }
