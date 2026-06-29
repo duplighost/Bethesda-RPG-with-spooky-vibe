@@ -81,6 +81,7 @@ export class Player {
     this.flareHeals = false; this.thornMail = 0;
 
     this.dead = false;
+    this.wakeGraceT = 0;   // brief spawn invulnerability so you can't be instakilled on waking
     this._hurtT = 0;
     this._regenT = 0;
     this._stepT = 0;
@@ -90,6 +91,7 @@ export class Player {
     this.crouched = false; this.height = 1.7;
     this.pos.set(x, this.world.getHeight(x, z) + this.height, z);
     this.yaw = yaw; this.pitch = 0; this.vel.set(0, 0, 0);
+    this.wakeGraceT = Math.max(this.wakeGraceT, 3.5);
   }
 
   toggleLantern() {
@@ -102,7 +104,7 @@ export class Player {
 
   // ---- damage / death ----
   damage(amount, source = '') {
-    if (this.dead) return;
+    if (this.dead || this.wakeGraceT > 0) return;
     // Grit reduces incoming damage a touch.
     amount *= clamp(1 - this.stats.grit * 0.03, 0.4, 1);
     // Blood Ward absorbs first.
@@ -171,6 +173,7 @@ export class Player {
   // ---- input-driven movement (called each frame) ----
   update(dt, input) {
     if (this.dead) return;
+    if (this.wakeGraceT > 0) this.wakeGraceT = Math.max(0, this.wakeGraceT - dt);
 
     // mouse look applied in main via addLook()
     this.pitch = clamp(this.pitch, -1.4, 1.4);

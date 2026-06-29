@@ -229,10 +229,11 @@ const journalOpen = () => !journalEl.classList.contains('hidden');
 const endingOpen = () => !endingEl.classList.contains('hidden');
 const inventoryOpen = () => !inventoryEl.classList.contains('hidden');
 const perksOpen = () => !perksEl.classList.contains('hidden');
+const deathOpen = () => !document.getElementById('death').classList.contains('hidden');
 // A real overlay/menu is up (sim should pause AND world clicks be ignored).
 function overlayOpen() {
   return mapOpen || readerOpen() || dialogue.active || npcs.shopOpen || interiors._fading
-    || journalOpen() || endingOpen() || inventoryOpen() || perksOpen();
+    || journalOpen() || endingOpen() || inventoryOpen() || perksOpen() || deathOpen();
 }
 // Blocks the sim. `paused` (pointer-lock lost) is separate from overlayOpen so
 // that a click can recover the lock even while paused — otherwise the re-lock
@@ -677,6 +678,7 @@ function beginGame(loadSave) {
   started = true;
   quests.start();
   if (loadSave) save.load();
+  else player.wakeGraceT = 8;   // the opening toll is chaotic — longer grace on a fresh wake
   if (!isTouchDevice()) lockPointer();
 }
 document.getElementById('begin').addEventListener('click', () => beginGame(false));

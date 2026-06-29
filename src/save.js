@@ -16,6 +16,8 @@ export class Save {
 
   save(announce = true) {
     const p = this.player;
+    // never persist a dead/zero-HP state — it would reload straight into death
+    if (p.dead || p.hp <= 0) { if (announce) showToast('The loop will not remember a death.'); return; }
     const data = {
       t: Date.now(),
       pos: [p.pos.x, p.pos.y, p.pos.z], yaw: p.yaw, pitch: p.pitch,
@@ -50,7 +52,10 @@ export class Save {
     p.pos.set(data.pos[0], data.pos[1], data.pos[2]); p.yaw = data.yaw; p.pitch = data.pitch;
     Object.assign(p.stats, data.stats);
     p.level = data.level; p.xp = data.xp; p.xpNext = data.xpNext;
-    p.maxHP = data.maxHP; p.hp = data.hp; p.maxWisp = data.maxWisp; p.wisp = data.wisp;
+    p.maxHP = data.maxHP || p.maxHP; p.hp = Math.max(1, data.hp || p.maxHP);
+    p.maxWisp = data.maxWisp || p.maxWisp; p.wisp = data.wisp ?? p.maxWisp;
+    p.dead = false; p.wakeGraceT = 3.5;
+    document.getElementById('death')?.classList.add('hidden');
     p.dread = p.dreadTarget = data.dread; p.coin = data.coin; p.skillPoints = data.skillPoints || 0;
     p.flags = data.flags || {};
     p.background = data.background;

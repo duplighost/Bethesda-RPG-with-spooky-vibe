@@ -549,7 +549,7 @@ export class Enemies {
   }
 
   _ambientSpawn(dt) {
-    if (this.suspended) return;
+    if (this.suspended || this.player.wakeGraceT > 0) return;
     this.spawnCd -= dt;
     const danger = this.world.danger || 1;
     const cap = Math.round(this.maxAmbient * danger);
@@ -561,7 +561,7 @@ export class Enemies {
     // spawn just out of comfortable view
     const a = Math.random() * TAU, r = randRange(Math.random, 34, 52);
     const x = p.x + Math.cos(a) * r, z = p.z + Math.sin(a) * r;
-    if (dist2D(x, z, 0, 0) < 30) return; // keep spawn town calmer at the well
+    if (dist2D(x, z, 0, 0) < 60) return; // keep the start village calm around the well
 
     const roll = Math.random();
     if (reg.id === 'mournwood') {
@@ -779,6 +779,7 @@ export class Enemies {
 
   _tryAttack(e, dt, p, d) {
     e.atkCd = Math.max(0, e.atkCd - dt);
+    if (this.player.wakeGraceT > 0) return false;
     if (d <= e.atkRange && e.atkCd <= 0 && e.stagger <= 0) {
       e.atkCd = 1.4;
       this.player.damage(e.dmg, e.type);
