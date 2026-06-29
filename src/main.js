@@ -192,8 +192,10 @@ function lockPointer() {
   } catch (e) {}
 }
 
-// re-capture the mouse after any overlay closes
-function relock() { if (started && !uiBlocking() && !isTouchDevice() && document.pointerLockElement !== canvas) lockPointer(); }
+// re-capture the mouse after any overlay closes (gated on overlayOpen, NOT
+// uiBlocking — uiBlocking includes `paused`, which is exactly the state we want
+// to recover from here).
+function relock() { if (started && !overlayOpen() && !isTouchDevice() && document.pointerLockElement !== canvas) lockPointer(); }
 npcs.onDialogueOpen = () => {}; npcs.onDialogueClose = relock;
 events.onDialogueOpen = () => {}; events.onDialogueClose = relock;
 bells.onDialogueOpen = () => {}; bells.onDialogueClose = relock;
@@ -227,10 +229,28 @@ const journalOpen = () => !journalEl.classList.contains('hidden');
 const endingOpen = () => !endingEl.classList.contains('hidden');
 const inventoryOpen = () => !inventoryEl.classList.contains('hidden');
 const perksOpen = () => !perksEl.classList.contains('hidden');
-function uiBlocking() {
-  return paused || mapOpen || readerOpen() || dialogue.active || npcs.shopOpen || interiors._fading
+// A real overlay/menu is up (sim should pause AND world clicks be ignored).
+function overlayOpen() {
+  return mapOpen || readerOpen() || dialogue.active || npcs.shopOpen || interiors._fading
     || journalOpen() || endingOpen() || inventoryOpen() || perksOpen();
 }
+// Blocks the sim. `paused` (pointer-lock lost) is separate from overlayOpen so
+// that a click can recover the lock even while paused — otherwise the re-lock
+// paths, gated on !uiBlocking, could never fire and movement would soft-lock.
+function uiBlocking() {
+  return paused || overlayOpen();
+}
+
+// "click to resume" hint, shown only when paused by a lost pointer-lock (so the
+// player never mistakes a recoverable pause for the game freezing).
+const pauseHint = document.createElement('div');
+pauseHint.id = 'pause-hint';
+pauseHint.textContent = '⊙  click to resume';
+pauseHint.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);'
+  + 'padding:14px 26px;border:1px solid rgba(255,122,24,.35);border-radius:4px;'
+  + 'background:rgba(8,6,12,.72);color:#e8d8b0;font:16px/1 Georgia,serif;letter-spacing:2px;'
+  + 'pointer-events:none;z-index:40;display:none;text-shadow:0 0 12px rgba(255,122,24,.5)';
+document.body.appendChild(pauseHint);
 
 // ---------- Input ----------
 const input = { fwd: false, back: false, left: false, right: false, sprint: false, jump: false };
@@ -301,7 +321,8 @@ addEventListener('mousemove', (e) => {
 });
 let lmb = false, rmb = false;
 canvas.addEventListener('mousedown', (e) => {
-  if (!started || uiBlocking() || isTouchDevice()) return;
+  if (!started || isTouchDevice() || overlayOpen()) return;
+  // paused (pointer-lock lost) but no overlay → this click recaptures the mouse
   if (document.pointerLockElement !== canvas) { lockPointer(); return; }
   if (e.button === 0) { lmb = true; weapons.primary(); }
   if (e.button === 2) { rmb = true; weapons.secondary(); }
@@ -693,6 +714,7 @@ function loop() {
   if (!started) { renderFrame(); return; }
 
   const blocked = uiBlocking();
+  pauseHint.style.display = (paused && !overlayOpen() && !isTouchDevice()) ? 'block' : 'none';
   if (!blocked) {
     if (lmb) weapons.primary();
     if (rmb) weapons.secondary();
@@ -717,4 +739,5 @@ function loop() {
 }
 loop();
 
-window.HALLOWIND = { scene, world, player, enemies, weapons, quests, npcs, interiors, events, save, dialogue, factions, bells, warden, items };
+window.HALLOWIND = { scene, world, player, enemies, weapons, quests, npcs, interiors, events, save, dialogue, factions, bells, warden, items,
+  _ui: { overlayOpen, uiBlocking, canRelock: () => !overlayOpen(), get paused() { return paused; }, set paused(v) { paused = v; } } };
