@@ -122,32 +122,37 @@ canvas#game{position:fixed;inset:0;display:block}
 #compass-needle{font-size:13px;color:var(--fog);text-align:center;white-space:nowrap;letter-spacing:6px}
 
 /* ---------- overlays ---------- */
-.overlay{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+/* align-items:flex-start + margin:auto on the child centres when it fits and
+   SCROLLS (instead of clipping top/bottom) when the content is taller than
+   the window — fixes the title-screen cut-off on shorter desktops. */
+.overlay{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-start;justify-content:center;
+  overflow-y:auto;padding:16px 12px;
   background:radial-gradient(circle at 50% 40%,rgba(20,10,30,.6),rgba(0,0,0,.96));backdrop-filter:blur(2px)}
+.overlay > *{margin:auto}
 
-#intro-inner{text-align:center;max-width:760px;padding:30px}
-#intro-lines{font-size:19px;line-height:2.1;color:#cfc6b4;font-family:"Georgia",serif;
-  white-space:pre-wrap;min-height:240px;text-shadow:0 2px 8px #000}
-#title-card{font-size:96px;letter-spacing:18px;color:var(--pumpkin);margin:10px 0;
+#intro-inner{text-align:center;max-width:760px;padding:16px}
+#intro-lines{font-size:clamp(15px,1.6vw,18px);line-height:1.75;color:#cfc6b4;font-family:"Georgia",serif;
+  white-space:pre-wrap;min-height:170px;text-shadow:0 2px 8px #000}
+#title-card{font-size:clamp(44px,9vw,84px);letter-spacing:clamp(6px,1.4vw,16px);color:var(--pumpkin);margin:6px 0;
   text-shadow:0 0 30px #ff7a18,0 0 70px #802500,0 4px 0 #000;animation:flick 3s infinite}
 @keyframes flick{0%,100%{opacity:1}48%{opacity:.86}50%{opacity:.62}52%{opacity:.9}}
-#title-sub{font-size:17px;letter-spacing:8px;color:var(--fog);margin-bottom:26px}
+#title-sub{font-size:15px;letter-spacing:7px;color:var(--fog);margin-bottom:16px}
 
 button{pointer-events:auto;cursor:pointer;font-family:inherit;font-size:18px;letter-spacing:5px;
   color:var(--bone);background:rgba(255,122,24,.08);border:1px solid var(--pumpkin);
   padding:13px 40px;border-radius:3px;transition:.2s;text-shadow:0 0 8px #000}
 button:hover{background:rgba(255,122,24,.22);box-shadow:0 0 26px rgba(255,122,24,.5);color:#fff}
-#bg-select{margin:6px 0 24px}
-#bg-prompt{font-size:15px;letter-spacing:3px;color:var(--fog);margin-bottom:14px;font-style:italic}
-#bg-cards{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:760px}
-.bg-card{pointer-events:auto;cursor:pointer;width:230px;text-align:left;padding:13px 16px;
+#bg-select{margin:4px 0 14px}
+#bg-prompt{font-size:14px;letter-spacing:3px;color:var(--fog);margin-bottom:10px;font-style:italic}
+#bg-cards{display:flex;flex-wrap:wrap;gap:9px;justify-content:center;max-width:760px;margin:0 auto}
+.bg-card{pointer-events:auto;cursor:pointer;width:228px;text-align:left;padding:10px 13px;
   border:1px solid rgba(232,226,208,.2);border-radius:5px;background:rgba(255,255,255,.03);transition:.15s}
 .bg-card:hover{border-color:var(--pumpkin);background:rgba(255,122,24,.1)}
 .bg-card.sel{border-color:var(--pumpkin);background:rgba(255,122,24,.16);box-shadow:0 0 20px rgba(255,122,24,.35)}
-.bg-card .bn{font-size:16px;color:var(--pumpkin-soft);letter-spacing:1px;font-variant:small-caps}
-.bg-card .bd{font-size:12px;color:#bdb6a4;line-height:1.4;margin:5px 0 7px}
-.bg-card .bp{font-size:11px;color:var(--witch);line-height:1.35;letter-spacing:.3px}
-#controls-hint{margin-top:26px;font-size:13px;line-height:2;color:var(--fog);letter-spacing:1px}
+.bg-card .bn{font-size:15px;color:var(--pumpkin-soft);letter-spacing:1px;font-variant:small-caps}
+.bg-card .bd{font-size:11.5px;color:#bdb6a4;line-height:1.35;margin:4px 0 6px}
+.bg-card .bp{font-size:11px;color:var(--witch);line-height:1.3;letter-spacing:.3px}
+#controls-hint{margin-top:16px;font-size:12px;line-height:1.7;color:var(--fog);letter-spacing:1px}
 #controls-hint b{color:var(--pumpkin-soft)}
 
 #death h1{font-size:60px;letter-spacing:10px;color:var(--blood);text-shadow:0 0 30px #500;margin-bottom:10px}

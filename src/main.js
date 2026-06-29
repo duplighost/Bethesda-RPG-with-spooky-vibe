@@ -508,6 +508,11 @@ function runIntro() {
       buf += (i ? '\n' : '') + INTRO[i]; introLinesEl.textContent = buf; i++;
       setTimeout(tick, 950);
     } else {
+      // the prologue has played — collapse it so the menu fits without scrolling
+      const lines = document.getElementById('intro-lines');
+      lines.style.transition = 'opacity .8s, max-height .8s, margin .8s';
+      lines.style.opacity = '0'; lines.style.maxHeight = '0'; lines.style.minHeight = '0';
+      lines.style.overflow = 'hidden'; lines.style.margin = '0';
       ['title-card', 'title-sub', 'bg-select', 'begin', 'controls-hint'].forEach(id => document.getElementById(id).classList.remove('hidden'));
       renderBackgroundCards();
       if (save.has()) {
