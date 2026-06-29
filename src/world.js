@@ -123,6 +123,7 @@ export class World {
     this._terrain();
     this._water();
     this._atmosphere();
+    this._horizon();
     this._gravewick();
     this._funeralHome();
     this._bellweatherHouse();
@@ -657,9 +658,79 @@ export class World {
   }
 
   // ---------------- Per-frame ----------------
+  // A distant, fog-free horizon of region silhouettes, built in-engine to match
+  // the low-poly night look. It follows the camera so it reads as infinitely far
+  // — it rotates as you turn but never slides as you walk, and sits behind all
+  // real geometry. This is the honest version of a "painted backdrop": a true
+  // horizon, not a flat billboard that breaks the moment you move.
+  _horizon() {
+    const R = 1150, g = new THREE.Group();
+    const sil = (color) => new THREE.MeshBasicMaterial({ color, fog: false });
+    const glow = (color, op = 0.7) => new THREE.SpriteMaterial({ map: this._glowTex, color, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+    const at = (az, build) => {
+      const n = new THREE.Group();
+      n.position.set(Math.cos(az) * R, 0, Math.sin(az) * R);
+      n.rotation.y = -az + Math.PI / 2;
+      build(n); g.add(n);
+    };
+    const box = (n, w, h, d, x, z, color, ry = 0) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), sil(color));
+      m.position.set(x, h / 2, z); m.rotation.y = ry; n.add(m); return m;
+    };
+    const cone = (n, r, h, x, z, color) => {
+      const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7), sil(color));
+      m.position.set(x, h / 2, z); n.add(m); return m;
+    };
+    const dot = (n, x, y, z, color, s = 5) => {
+      const sp = new THREE.Sprite(glow(color)); sp.scale.setScalar(s); sp.position.set(x, y, z); n.add(sp);
+    };
+
+    // 1 · the far cathedral city you can see but never reach (Hallowind proper)
+    at(-1.45, (n) => {
+      const c = 0x0b0a15;
+      for (let i = 0; i < 9; i++) box(n, randRange(this.rng, 9, 16), randRange(this.rng, 55, 120), 12, (i - 4) * 22, randRange(this.rng, -12, 12), c);
+      for (const sx of [-16, 16]) { box(n, 20, 150, 18, sx, -6, c); cone(n, 13, 46, sx, -6, c).position.y = 173; }
+      for (let i = 0; i < 16; i++) dot(n, randRange(this.rng, -92, 92), randRange(this.rng, 16, 92), 6, 0xffb060, randRange(this.rng, 3, 6));
+    });
+    // 2 · Mournwood treeline
+    at(2.45, (n) => {
+      for (let i = 0; i < 16; i++) cone(n, randRange(this.rng, 5, 9), randRange(this.rng, 26, 66), (i - 8) * 13, randRange(this.rng, -10, 10), 0x070c09);
+    });
+    // 3 · Ashfall Works — mill block + smokestacks with ember tops
+    at(3.7, (n) => {
+      const c = 0x110c0a;
+      box(n, 80, 46, 30, 0, 0, c); box(n, 40, 64, 24, -34, 6, c);
+      for (const sx of [-18, 6, 30]) { box(n, 9, randRange(this.rng, 80, 116), 9, sx, -10, c); dot(n, sx, 100, -10, 0xff7a2a, 6); }
+    });
+    // 4 · the Thousand-Jack hill, crowned with a great lantern
+    at(-0.35, (n) => {
+      cone(n, 90, 70, 0, 0, 0x0c0a11);
+      const jack = new THREE.Mesh(new THREE.SphereGeometry(16, 12, 10), sil(0x140a06)); jack.position.set(0, 76, 0); n.add(jack);
+      dot(n, 0, 76, 0, 0xff8a1e, 26);
+    });
+    // 5 · Gallowsfen — a drowned, tilted church
+    at(1.15, (n) => {
+      const c = 0x0a0f11;
+      box(n, 46, 34, 22, 0, 0, c, 0.06); box(n, 14, 70, 14, 22, -4, c, 0.16);
+      dot(n, 22, 54, -4, 0x6fa0ff, 7);
+    });
+    // 6 · Jackfield — a far farmhouse and windmill
+    at(0.4, (n) => {
+      const c = 0x120d07;
+      box(n, 40, 36, 26, 0, 0, c, 0.1); box(n, 8, 70, 8, 30, -6, c);
+      const hub = new THREE.Mesh(new THREE.BoxGeometry(22, 22, 3), sil(c)); hub.position.set(30, 64, -6); hub.rotation.z = 0.6; n.add(hub);
+      dot(n, 0, 20, 13, 0xffb060, 5); dot(n, -8, 14, 13, 0xffb060, 4);
+    });
+
+    this.horizon = g;
+    this.scene.add(g);
+  }
+
   update(dt, playerPos) {
     this._t += dt;
     this.updateNight(dt);
+    // keep the horizon centred on the camera so it reads as infinitely far
+    if (this.horizon && playerPos) this.horizon.position.set(playerPos.x, 0, playerPos.z);
     this._updateLightPool(dt, playerPos);
     // drift leaf litter with the wind, recycling around the player
     if (this.leaves) {
