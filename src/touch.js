@@ -5,7 +5,13 @@
 // ============================================================
 
 export function isTouchDevice() {
-  return ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+  // ?touch=1 forces controls on (handy for desktop testing); ?touch=0 forces off.
+  const q = (typeof location !== 'undefined' && location.search) || '';
+  if (/[?&]touch=0\b/.test(q)) return false;
+  if (/[?&]touch(=1)?\b/.test(q)) return true;
+  // A coarse primary pointer is the reliable signal for phones/tablets.
+  const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  return coarse || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 }
 
 // actions: { move(mx,my), look(dx,dy), fireDown(), fireUp(), cast(), lantern(),

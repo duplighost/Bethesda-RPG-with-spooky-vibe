@@ -79,6 +79,14 @@ export const LOOT = [
     icon: 0xff7a18, grant: () => ({ stat: 'guile', amount: 2 }) },
   { x: -300, z: 180, title: 'Forbidden Harvestcraft Page', body: '+Hex. Your witchfire burns greener.',
     icon: 0x8dff6a, grant: () => ({ stat: 'hex', amount: 3 }) },
+  { x: -120, z: -64, title: "The Drowned Saint's Thimble", body: '+Presence, and the dead whisper softer. The right word lands now where the gun would not.',
+    icon: 0x9fd0ff, grant: () => ({ stat: 'presence', amount: 2, dread: -10 }) },
+  { x: 150, z: 92, title: 'Union Furnace Scrip', body: '+Grit, and a fold of brass county coin.',
+    icon: 0xffcf6a, grant: () => ({ stat: 'grit', amount: 1, coin: 90 }) },
+  { x: -184, z: -158, title: 'Moon-Splinter Lens', body: '+Instinct. The fog thins a little when you look through it.',
+    icon: 0xbfe9ff, grant: () => ({ stat: 'instinct', amount: 2 }) },
+  { x: 236, z: 206, title: 'The Thirteenth Place Card', body: '+Wits, and the memory of a chair left empty at a long table.',
+    icon: 0xd8b0ff, grant: () => ({ stat: 'wits', amount: 2, xp: 60 }) },
 ];
 
 export class Items {
@@ -170,8 +178,24 @@ export class Items {
       showToast('You found your own lantern arm. Press F.');
     } else if (l.grant) {
       const g = l.grant();
-      if (g.stat) { this.player.stats[g.stat] += g.amount; showToast(`${l.title} — +${g.amount} ${g.stat.toUpperCase()}`); }
-      if (g.ammo) { this.player.weaponsRef && (this.player.weaponsRef.ammoMax += 0); showToast(l.title); }
+      const parts = [];
+      if (g.stat) {
+        this.player.stats[g.stat] = (this.player.stats[g.stat] || 0) + g.amount;
+        parts.push(`+${g.amount} ${g.stat.toUpperCase()}`);
+      }
+      if (g.ammo) {
+        const w = this.player.weaponsRef;
+        const bonus = g.ammo === true ? 6 : g.ammo;
+        if (w) { w.ammoMax += bonus; w.ammo = w.ammoMax; }
+        parts.push(`+${bonus} ammo`);
+      }
+      if (g.coin) { this.player.coin += g.coin; parts.push(`+${g.coin} coin`); }
+      if (g.xp) { this.player.addXP(g.xp); parts.push(`+${g.xp} XP`); }
+      if (g.dread) {
+        this.player.dread = Math.max(0, (this.player.dread || 0) + g.dread);
+        parts.push(`${g.dread > 0 ? '+' : ''}${g.dread} Dread`);
+      }
+      showToast(parts.length ? `${l.title} — ${parts.join(', ')}` : l.title);
     } else showToast(l.title);
     this.quests?.onLoot(l);
   }

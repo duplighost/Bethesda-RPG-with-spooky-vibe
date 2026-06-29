@@ -243,7 +243,7 @@ export class World {
     }
     const lg = new THREE.BufferGeometry();
     lg.setAttribute('position', new THREE.BufferAttribute(lp, 3));
-    this.leaves = new THREE.Points(lg, new THREE.PointsMaterial({ color: 0xc4631e, size: 0.6, transparent: true, opacity: 0.55 }));
+    this.leaves = new THREE.Points(lg, new THREE.PointsMaterial({ color: 0xc4631e, size: 0.42, transparent: true, opacity: 0.42, map: this._glowTex, alphaTest: 0.08, depthWrite: false }));
     this.scene.add(this.leaves);
   }
 

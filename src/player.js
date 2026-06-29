@@ -35,7 +35,7 @@ export class Player {
     this.radius = 0.5;
 
     // RPG stats — Grit/Aim/Wits/Hex/Guile etc. (subset wired to play)
-    this.stats = { grit: 4, aim: 4, wits: 3, hex: 4, guile: 3, instinct: 3 };
+    this.stats = { grit: 4, aim: 4, wits: 3, hex: 4, guile: 3, instinct: 3, presence: 3 };
     this.level = 1;
     this.xp = 0;
     this.xpNext = 100;

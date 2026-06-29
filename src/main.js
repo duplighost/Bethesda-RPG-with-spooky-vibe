@@ -26,7 +26,19 @@ import { clamp, dist2D, TAU, showToast } from './utils.js';
 
 // ---------- Renderer / Scene / Camera ----------
 const canvas = document.getElementById('game');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+} catch (err) {
+  // WebGL disabled/unavailable — surface a readable message instead of a blank page.
+  try {
+    const d = document.createElement('div');
+    d.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#08060c;color:#e8d8b0;font:16px/1.6 Georgia,serif;text-align:center;padding:24px;z-index:999';
+    d.textContent = 'HALLOWIND needs WebGL, which your browser or device has disabled. Try another browser, or enable hardware acceleration, then reload.';
+    document.body.appendChild(d);
+  } catch (e2) {}
+  throw err;
+}
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.8));
 renderer.shadowMap.enabled = true;
@@ -169,8 +181,17 @@ world.onBloodMoon = (on) => {
 };
 save.onForceExitInterior = () => { if (interiors.active) { player.interior = null; interiors.active = null; enemies.suspended = false; scene.fog.density = 0.0065; world.setInteriorMuted(false); } };
 
+// pointer-lock can throw a SecurityError (or reject its promise) in modern
+// browsers if called outside a user gesture — wrap it so it can never surface.
+function lockPointer() {
+  try {
+    const r = canvas.requestPointerLock();
+    if (r && typeof r.catch === 'function') r.catch(() => {});
+  } catch (e) {}
+}
+
 // re-capture the mouse after any overlay closes
-function relock() { if (started && !uiBlocking() && !isTouchDevice() && document.pointerLockElement !== canvas) canvas.requestPointerLock(); }
+function relock() { if (started && !uiBlocking() && !isTouchDevice() && document.pointerLockElement !== canvas) lockPointer(); }
 npcs.onDialogueOpen = () => {}; npcs.onDialogueClose = relock;
 events.onDialogueOpen = () => {}; events.onDialogueClose = relock;
 bells.onDialogueOpen = () => {}; bells.onDialogueClose = relock;
@@ -279,7 +300,7 @@ addEventListener('mousemove', (e) => {
 let lmb = false, rmb = false;
 canvas.addEventListener('mousedown', (e) => {
   if (!started || uiBlocking() || isTouchDevice()) return;
-  if (document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
+  if (document.pointerLockElement !== canvas) { lockPointer(); return; }
   if (e.button === 0) { lmb = true; weapons.primary(); }
   if (e.button === 2) { rmb = true; weapons.secondary(); }
 });
@@ -623,7 +644,7 @@ function beginGame(loadSave) {
   started = true;
   quests.start();
   if (loadSave) save.load();
-  if (!isTouchDevice()) canvas.requestPointerLock();
+  if (!isTouchDevice()) lockPointer();
 }
 document.getElementById('begin').addEventListener('click', () => beginGame(false));
 document.getElementById('respawn').addEventListener('click', () => {
