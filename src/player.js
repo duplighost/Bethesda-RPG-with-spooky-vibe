@@ -175,7 +175,10 @@ export class Player {
     this.pitch = clamp(this.pitch, -1.4, 1.4);
 
     // ground-relative movement basis
-    const forward = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+    // forward must match the camera look direction (getDir): rotating (0,0,-1)
+    // by yaw gives (-sin, 0, -cos). The old (+sin,+cos) was the exact opposite,
+    // which made W walk *away* from where you aim.
+    const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     // keyboard booleans + analog joystick (mx strafe, my forward)
     let fAxis = (input.fwd ? 1 : 0) - (input.back ? 1 : 0) + (input.my || 0);

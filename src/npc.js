@@ -6,43 +6,65 @@
 import * as THREE from 'three';
 import { dist2D, clamp, showToast, whisper } from './utils.js';
 
-// ---- a simple cloaked humanoid ----
+// ---- a proper coated humanoid silhouette (legs, coat, arms, head) ----
+function darken(hex, f = 0.6) {
+  const r = ((hex >> 16) & 255) * f, gg = ((hex >> 8) & 255) * f, b = (hex & 255) * f;
+  return (r << 16) | (gg << 8) | b;
+}
 function buildBody(palette) {
   const g = new THREE.Group();
-  const cloak = new THREE.Mesh(
-    new THREE.ConeGeometry(0.4, 1.5, 8),
-    new THREE.MeshStandardMaterial({ color: palette.cloak, roughness: 1, flatShading: true })
-  );
-  cloak.position.y = 0.75; cloak.castShadow = true; g.add(cloak);
-  const torso = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.22, 0.28, 0.7, 8),
-    new THREE.MeshStandardMaterial({ color: palette.coat, roughness: 1 })
-  );
-  torso.position.y = 1.35; g.add(torso);
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.2, 12, 12),
-    new THREE.MeshStandardMaterial({ color: palette.skin, roughness: 0.9 })
-  );
-  head.position.y = 1.85; head.castShadow = true; g.add(head);
+  const coatMat = new THREE.MeshStandardMaterial({ color: palette.coat, roughness: 0.95 });
+  const cloakMat = new THREE.MeshStandardMaterial({ color: palette.cloak, roughness: 1, flatShading: true });
+  const darkMat = new THREE.MeshStandardMaterial({ color: darken(palette.coat, 0.5), roughness: 1 });
+
+  // legs (boots up to the coat hem)
+  for (const sx of [-0.11, 0.11]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.07, 0.85, 6), darkMat);
+    leg.position.set(sx, 0.42, 0); leg.castShadow = true; g.add(leg);
+  }
+  // long flared coat over the lower body
+  const coat = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.42, 1.25, 10, 1, true), cloakMat);
+  coat.position.y = 1.05; coat.castShadow = true; g.add(coat);
+  // torso + slight shoulders
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.27, 0.55, 8), coatMat);
+  torso.position.y = 1.5; torso.castShadow = true; g.add(torso);
+  const shoulders = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.42, 3, 6), coatMat);
+  shoulders.rotation.z = Math.PI / 2; shoulders.position.y = 1.74; g.add(shoulders);
+  // arms hanging at the sides
+  for (const sx of [-0.27, 0.27]) {
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.5, 3, 6), coatMat);
+    arm.position.set(sx, 1.5, 0.02); arm.rotation.z = sx > 0 ? 0.1 : -0.1; g.add(arm);
+  }
+  // neck + head
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.12, 6), new THREE.MeshStandardMaterial({ color: palette.skin, roughness: 0.9 }));
+  neck.position.y = 1.86; g.add(neck);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 14, 14),
+    new THREE.MeshStandardMaterial({ color: palette.skin, roughness: 0.85 }));
+  head.position.y = 2.02; head.scale.set(0.92, 1.08, 0.96); head.castShadow = true; g.add(head);
+
   if (palette.hat) {
-    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.04, 12),
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.035, 14),
       new THREE.MeshStandardMaterial({ color: palette.hat, roughness: 1 }));
-    brim.position.y = 1.98; g.add(brim);
-    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.32, 10),
+    brim.position.y = 2.12; g.add(brim);
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.28, 12),
       new THREE.MeshStandardMaterial({ color: palette.hat, roughness: 1 }));
-    top.position.y = 2.15; g.add(top);
+    crown.position.y = 2.26; g.add(crown);
+  } else {
+    // a raised hood instead of a hat
+    const hood = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), cloakMat);
+    hood.position.y = 2.04; hood.scale.set(1, 1.15, 1.05); g.add(hood);
   }
   if (palette.mask) {
-    const mask = new THREE.Mesh(new THREE.SphereGeometry(0.21, 12, 12),
-      new THREE.MeshStandardMaterial({ color: palette.mask, emissive: palette.mask, emissiveIntensity: 0.25, roughness: 0.5 }));
-    mask.scale.z = 0.5; mask.position.set(0, 1.86, 0.12); g.add(mask);
+    const mask = new THREE.Mesh(new THREE.SphereGeometry(0.17, 14, 14),
+      new THREE.MeshStandardMaterial({ color: palette.mask, emissive: palette.mask, emissiveIntensity: 0.3, roughness: 0.4 }));
+    mask.scale.z = 0.55; mask.position.set(0, 2.03, 0.1); g.add(mask);
   }
   // a soft lantern glow at the belt so NPCs read at night (sprite = free)
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-    color: palette.glow ?? 0xffb060, transparent: true, opacity: 0.5,
+    color: palette.glow ?? 0xffb060, transparent: true, opacity: 0.45,
     blending: THREE.AdditiveBlending, depthWrite: false,
   }));
-  glow.scale.setScalar(1.6); glow.position.y = 1.3; g.add(glow);
+  glow.scale.setScalar(1.5); glow.position.y = 1.25; g.add(glow);
   return g;
 }
 
