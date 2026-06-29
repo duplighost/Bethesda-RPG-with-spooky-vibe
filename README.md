@@ -63,11 +63,17 @@ That's it — there's nothing to configure (a `netlify.toml` is included that se
 | **Q** | **Lantern Flare** — AoE stun, reveals ghosts, relieves Dread |
 | **1 / 2** | Select arm: Revolver / Hexbolt |
 | **R** | Reload |
+| **C** | Crouch / sneak (quieter, harder to spot) |
+| **H** | Quick-heal (drink a Bonebroth Flask) |
 | **E** | Interact — read notes, take loot, **talk to NPCs**, enter buildings, toll bells |
-| **J** | Journal — objective, bells, factions, character sheet |
+| **J / I / P** | Journal / Inventory / Perks |
 | **K / L** | Save / Load (also auto-saves) |
 | **TAB** | County map — click a discovered region to fast-travel |
 | **ESC** | Release cursor / back out of menus |
+
+**On phones/tablets** the game shows touch controls automatically: a left **virtual
+joystick** to move, **drag the right side** to look, and on-screen buttons for fire,
+cast, lantern, flare, reload, jump, crouch, interact, and the satchel.
 
 ---
 
@@ -182,6 +188,28 @@ That's it — there's nothing to configure (a `netlify.toml` is included that se
   pumpkin-glow and witchfire bleed light — with a graceful fallback to plain rendering if
   a device can't do it.
 
+### …and the depth pass
+
+- **Inventory (I)** — a real satchel: **consumable supplies** (Bonebroth Flask, Wisp
+  Draught, Salt-Ward Charm) you buy at the Mask Market and use later (H to quick-heal),
+  plus a **collected key-item log** of every boss/haunt relic you've earned.
+- **Perk tree (P)** — spend the skill points you earn each level across Gunslinger,
+  Occult, Survival and Stealth perks (faster reload, cheaper spells, +Vitality, recoil
+  thorns, stronger sneak attacks, healing flares, and more). Persisted in saves.
+- **Crouch + stealth (C)** — enemies now start **unaware** and only hunt once they
+  **detect** you, scaled by your **noise** (sprinting and a lit lantern give you away;
+  crouching and standing still hide you). Gunshots and loud spells wake everything
+  nearby. Striking an unaware enemy lands a **sneak attack** for bonus damage. A HUD
+  indicator shows HIDDEN / SNEAKING / SPOTTED.
+- **Mobile / touch controls** — full on-screen joystick + look + action buttons that
+  appear automatically on touch devices.
+
+> **On painted backdrops:** another build composites pre-rendered region paintings
+> behind its 3D, which looks great in a still. I deliberately *didn't* copy that —
+> a fixed painting behind a live, walkable 3D world reads as a pasted-on billboard the
+> moment you move, which is the opposite of "flawless." HALLOWIND stays fully
+> procedural and seamless instead.
+
 > **Performance note:** rather than a real light per pumpkin (200+ would crush a
 > forward renderer), every glow is a free emissive sprite and a fixed pool of ~10
 > real point-lights is distance-culled to the nearest glow points each frame.
@@ -219,6 +247,9 @@ Plain ES modules, no bundler. Each system is one file under `src/`:
 | `bells.js` | Harvest Bells, curse meter, the five endings |
 | `backgrounds.js` | Character creation backgrounds |
 | `warden.js` | Lantern Wardens contract questline |
+| `inventory.js` | Consumables + key-item log |
+| `perks.js` | Perk tree + effects |
+| `touch.js` | Mobile on-screen controls |
 | `save.js` | localStorage save/load |
 | `vendor/addons/` | Vendored Three.js postprocessing (bloom) |
 | `audio.js` | Procedural Web Audio engine |

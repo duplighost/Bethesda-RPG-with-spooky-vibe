@@ -63,6 +63,22 @@ export class Player {
 
     this.flags = {};
     this.coin = 0;
+
+    // inventory
+    this.consumables = {};   // id -> count
+    this.keyItems = [];      // [{id,name,desc}]
+
+    // crouch / stealth
+    this.crouched = false;
+    this.noise = 0;          // 0..1, how loud you are right now
+    this.detected = false;   // any enemy currently aware of you?
+
+    // perks
+    this.perks = [];         // owned perk ids
+    this.reloadMult = 1; this.fireCdMult = 1; this.spellCostMult = 1;
+    this.gunDmgMult = 1; this.sneakMult = 2.0; this.interiorSpeedMult = 1;
+    this.flareHeals = false; this.thornMail = 0;
+
     this.dead = false;
     this._hurtT = 0;
     this._regenT = 0;
@@ -70,6 +86,7 @@ export class Player {
   }
 
   spawnAt(x, z, yaw = Math.PI) {
+    this.crouched = false; this.height = 1.7;
     this.pos.set(x, this.world.getHeight(x, z) + this.height, z);
     this.yaw = yaw; this.pitch = 0; this.vel.set(0, 0, 0);
   }
@@ -100,6 +117,19 @@ export class Player {
     if (this.hp <= 0) this._die();
   }
   heal(a) { this.hp = Math.min(this.maxHP, this.hp + a); }
+
+  // ---- inventory ----
+  addConsumable(id, n = 1) { this.consumables[id] = (this.consumables[id] || 0) + n; }
+  addKeyItem(id, name, desc) {
+    if (this.keyItems.some(k => k.id === id)) return;
+    this.keyItems.push({ id, name, desc });
+  }
+
+  // ---- crouch / stealth ----
+  toggleCrouch() {
+    this.crouched = !this.crouched;
+    if (this.crouched) showToast('Crouched — quieter, harder to spot.');
+  }
   _die() {
     this.dead = true;
     document.getElementById('death').classList.remove('hidden');
@@ -147,16 +177,27 @@ export class Player {
     // ground-relative movement basis
     const forward = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+    // keyboard booleans + analog joystick (mx strafe, my forward)
+    let fAxis = (input.fwd ? 1 : 0) - (input.back ? 1 : 0) + (input.my || 0);
+    let rAxis = (input.right ? 1 : 0) - (input.left ? 1 : 0) + (input.mx || 0);
     const wish = new THREE.Vector3();
-    if (input.fwd) wish.add(forward);
-    if (input.back) wish.sub(forward);
-    if (input.right) wish.add(right);
-    if (input.left) wish.sub(right);
-    const moving = wish.lengthSq() > 0;
-    if (moving) wish.normalize();
+    wish.addScaledVector(forward, fAxis);
+    wish.addScaledVector(right, rAxis);
+    const moving = wish.lengthSq() > 0.0004;
+    if (wish.length() > 1) wish.normalize();
 
-    const sprint = input.sprint && input.fwd;
-    const speed = (sprint ? 9.5 : 5.2) * (1 + this.stats.guile * 0.01);
+    const joyMag = Math.hypot(input.mx || 0, input.my || 0);
+    const sprint = (input.sprint || joyMag > 0.92) && fAxis > 0.1 && !this.crouched;
+    const interiorMult = this.interior ? this.interiorSpeedMult : 1;
+    const speed = (sprint ? 9.5 : 5.2) * (this.crouched ? 0.45 : 1) * interiorMult * (1 + this.stats.guile * 0.01);
+
+    // crouch lowers the eye-line
+    this.height = lerp(this.height, this.crouched ? 1.05 : 1.7, 1 - Math.pow(0.001, dt));
+
+    // how loud you are — drives enemy detection
+    let noise = moving ? (sprint ? 1.0 : (this.crouched ? 0.22 : 0.55)) : (this.crouched ? 0.03 : 0.12);
+    if (this.lanternOn) noise += 0.15;
+    this.noise = clamp(noise, 0, 1.2);
     // accelerate horizontally
     this.vel.x = lerp(this.vel.x, wish.x * speed, 1 - Math.pow(0.0001, dt));
     this.vel.z = lerp(this.vel.z, wish.z * speed, 1 - Math.pow(0.0001, dt));

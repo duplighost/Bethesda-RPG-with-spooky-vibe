@@ -56,6 +56,7 @@ export class Warden {
     this.factions.modify('wardens', 25);
     this.player.stats.aim += 2; this.player.stats.instinct += 1;
     this.player.flags.wardenStar = true;
+    this.player.addKeyItem('warden_star', "The Warden's Silver Star", 'Sworn to hunter law. (+2 Aim, +1 Instinct)');
     showToast("THE WARDEN'S SILVER STAR — +2 Aim, +1 Instinct. You hunt under hunter law now.");
     whisper('“you’re one of us. for whatever that’s worth, these nights.”');
   }

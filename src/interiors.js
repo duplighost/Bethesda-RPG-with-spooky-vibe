@@ -276,6 +276,7 @@ The grief learned our faces. Now it sets the table itself.`);
         cell.group.remove(key); cell.group.remove(L);
         this.player.stats.wits += 2; this.player.addXP(60);
         this.audio.pickup();
+        this.player.addKeyItem('mourning_key', 'The Mourning Key', 'Opens locked doors where someone died waiting. (+2 Wits)');
         showToast('THE MOURNING KEY — +2 Wits. It opens doors where someone died waiting.');
         if (this.player.flags) this.player.flags.mourningKey = true;
       },
@@ -486,6 +487,7 @@ Do not, under any roof of his, stop moving.`);
     cell.interactables.push({
       pos: spool.position.clone(), radius: 3, prompt: "take · Mother's Spool", used: false,
       run: () => { cell.group.remove(spool); this.audio.pickup();
+        this.player.addKeyItem('mothers_spool', "Mother's Spool", 'Warm thread of someone’s hair. (+25 max Wisp)');
         showToast("MOTHER'S SPOOL — +25 max Wisp. It is warm, and it is someone's hair."); },
     });
   }

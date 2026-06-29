@@ -60,6 +60,8 @@
 
     <div id="compass"><div id="compass-needle">▲</div></div>
 
+    <div id="stealth"><span id="stealth-eye">●</span> <span id="stealth-text">HIDDEN</span></div>
+
     <div id="purse">
       <div id="coin">◉ <span id="coin-n">0</span> soulgilt</div>
       <div id="companion-status" class="hidden">☾ <span id="companion-name"></span> <span id="companion-hp"></span></div>
@@ -112,8 +114,8 @@
         <b>WASD</b> move · <b>MOUSE</b> look · <b>SHIFT</b> sprint · <b>SPACE</b> jump<br/>
         <b>LMB</b> fire · <b>RMB</b> cast spell · <b>F</b> lantern · <b>Q</b> Lantern&nbsp;Flare<br/>
         <b>1</b> revolver · <b>2</b> lantern hand · <b>3–8</b>/<b>wheel</b> pick spell · <b>R</b> reload<br/>
-        <b>E</b> interact / talk · <b>TAB</b> map (click a known region to fast-travel) · <b>J</b> journal<br/>
-        <b>K</b> save · <b>L</b> load · <b>ESC</b> release cursor / back
+        <b>C</b> crouch/sneak · <b>H</b> quick-heal · <b>E</b> interact/talk · <b>TAB</b> map (fast-travel)<br/>
+        <b>J</b> journal · <b>I</b> inventory · <b>P</b> perks · <b>K</b> save · <b>L</b> load · <b>ESC</b> back
       </div>
     </div>
   </div>
@@ -159,6 +161,27 @@
         </div>
       </div>
       <div class="reader-foot">[ <span class="key">J</span> to close ]</div>
+    </div>
+  </div>
+
+  <!-- ============ INVENTORY ============ -->
+  <div id="inventory" class="overlay hidden">
+    <div id="inv-inner" class="sheet">
+      <h2>THE WICKMARKED'S SATCHEL</h2>
+      <div class="sheet-cols">
+        <div class="scol"><h3>◆ Consumables</h3><div id="inv-consumables"></div></div>
+        <div class="scol"><h3>✦ Key Items</h3><div id="inv-keyitems"></div></div>
+      </div>
+      <div class="reader-foot">[ <span class="key">I</span> close · <span class="key">H</span> quick-heal ]</div>
+    </div>
+  </div>
+
+  <!-- ============ PERKS ============ -->
+  <div id="perks" class="overlay hidden">
+    <div id="perks-inner" class="sheet">
+      <h2>PERKS <span id="perk-points"></span></h2>
+      <div id="perks-grid"></div>
+      <div class="reader-foot">[ <span class="key">P</span> to close ]</div>
     </div>
   </div>
 

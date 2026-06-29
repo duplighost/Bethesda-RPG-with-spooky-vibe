@@ -19,6 +19,9 @@ import { Factions, FACTIONS } from './factions.js';
 import { Bells, ENDINGS } from './bells.js';
 import { BACKGROUNDS } from './backgrounds.js';
 import { Warden } from './warden.js';
+import { CONSUMABLES, useConsumable, quickHeal } from './inventory.js';
+import { PERKS, buyPerk, canBuy, reapplyPerks } from './perks.js';
+import { setupTouch, isTouchDevice } from './touch.js';
 import { clamp, dist2D, TAU, showToast } from './utils.js';
 
 // ---------- Renderer / Scene / Camera ----------
@@ -91,6 +94,7 @@ bells.onSilence = () => warden.onBellSilenced();
 save.factions = factions;
 save.bells = bells;
 save.warden = warden;
+save.reapplyPerks = reapplyPerks;
 enemies.onBossDefeated = () => { quests.onBossDefeated(); bells.onMarrowJack(); };
 enemies.onEngineDefeated = () => bells.setEngineDead();
 bells.onEnding = (ending) => showEnding(ending);
@@ -109,7 +113,7 @@ world.onBloodMoon = (on) => {
 save.onForceExitInterior = () => { if (interiors.active) { player.interior = null; interiors.active = null; enemies.suspended = false; scene.fog.density = 0.0065; world.setInteriorMuted(false); } };
 
 // re-capture the mouse after any overlay closes
-function relock() { if (started && !uiBlocking() && document.pointerLockElement !== canvas) canvas.requestPointerLock(); }
+function relock() { if (started && !uiBlocking() && !isTouchDevice() && document.pointerLockElement !== canvas) canvas.requestPointerLock(); }
 npcs.onDialogueOpen = () => {}; npcs.onDialogueClose = relock;
 events.onDialogueOpen = () => {}; events.onDialogueClose = relock;
 bells.onDialogueOpen = () => {}; bells.onDialogueClose = relock;
@@ -137,10 +141,15 @@ const readerOpen = () => !readerEl.classList.contains('hidden');
 function closeReader() { readerEl.classList.add('hidden'); items.reading = false; relock(); }
 const journalEl = document.getElementById('journal');
 const endingEl = document.getElementById('ending');
+const inventoryEl = document.getElementById('inventory');
+const perksEl = document.getElementById('perks');
 const journalOpen = () => !journalEl.classList.contains('hidden');
 const endingOpen = () => !endingEl.classList.contains('hidden');
+const inventoryOpen = () => !inventoryEl.classList.contains('hidden');
+const perksOpen = () => !perksEl.classList.contains('hidden');
 function uiBlocking() {
-  return paused || mapOpen || readerOpen() || dialogue.active || npcs.shopOpen || interiors._fading || journalOpen() || endingOpen();
+  return paused || mapOpen || readerOpen() || dialogue.active || npcs.shopOpen || interiors._fading
+    || journalOpen() || endingOpen() || inventoryOpen() || perksOpen();
 }
 
 // ---------- Input ----------
@@ -164,9 +173,13 @@ addEventListener('keydown', (e) => {
     if (npcs.shopOpen) { npcs.closeShop(); return; }
     if (dialogue.active) { dialogue.close(); return; }
     if (journalOpen()) { toggleJournal(); return; }
+    if (inventoryOpen()) { toggleInventory(); return; }
+    if (perksOpen()) { togglePerks(); return; }
     if (mapOpen) { toggleMap(); return; }
   }
   if (journalOpen()) { if (e.code === 'KeyJ') toggleJournal(); return; }
+  if (inventoryOpen()) { if (e.code === 'KeyI') toggleInventory(); return; }
+  if (perksOpen()) { if (e.code === 'KeyP') togglePerks(); return; }
   if (endingOpen()) return;
   if (readerOpen()) { if (e.code === 'KeyE') closeReader(); return; }
   if (npcs.shopOpen) { if (e.code === 'KeyE') { npcs.closeShop(); } return; }
@@ -188,6 +201,10 @@ addEventListener('keydown', (e) => {
     case 'KeyK': save.save(true); break;
     case 'KeyL': save.load(); break;
     case 'KeyJ': toggleJournal(); break;
+    case 'KeyI': toggleInventory(); break;
+    case 'KeyP': togglePerks(); break;
+    case 'KeyC': player.toggleCrouch(); break;
+    case 'KeyH': quickHeal(player); break;
     case 'Tab': e.preventDefault(); toggleMap(); break;
   }
 });
@@ -204,7 +221,7 @@ addEventListener('mousemove', (e) => {
 });
 let lmb = false, rmb = false;
 canvas.addEventListener('mousedown', (e) => {
-  if (!started || uiBlocking()) return;
+  if (!started || uiBlocking() || isTouchDevice()) return;
   if (document.pointerLockElement !== canvas) { canvas.requestPointerLock(); return; }
   if (e.button === 0) { lmb = true; weapons.primary(); }
   if (e.button === 2) { rmb = true; weapons.secondary(); }
@@ -215,6 +232,22 @@ addEventListener('wheel', (e) => {
   if (!started || uiBlocking() || weapons.mode !== 'spell') return;
   weapons.cycleSpell(e.deltaY > 0 ? 1 : -1);
 }, { passive: true });
+
+// ---------- Touch / mobile controls ----------
+setupTouch({
+  move: (mx, my) => { input.mx = mx; input.my = my; },
+  look: (dx, dy) => { if (started && !uiBlocking()) player.addLook(dx, dy, 0.005); },
+  fireDown: () => { if (started && !uiBlocking()) { lmb = true; weapons.primary(); } },
+  fireUp: () => { lmb = false; },
+  cast: () => { if (started && !uiBlocking()) weapons.secondary(); },
+  lantern: () => { if (started) player.toggleLantern(); },
+  flare: () => { if (started && !uiBlocking()) weapons.flare(); },
+  reload: () => { if (started && !uiBlocking()) weapons.reload(); },
+  jump: () => { if (started && !uiBlocking()) { input.jump = true; setTimeout(() => input.jump = false, 130); } },
+  crouch: () => { if (started) player.toggleCrouch(); },
+  interact: () => { if (started && !uiBlocking()) { const n = getNearest(); if (n) n.run(); } else if (readerOpen()) closeReader(); },
+  bag: () => { if (started) toggleInventory(); },
+});
 
 document.addEventListener('pointerlockchange', () => {
   paused = document.pointerLockElement !== canvas;
@@ -334,6 +367,50 @@ function renderJournal() {
     `<div class="j-row"><span>Companion</span><span class="v">${npcs.companion ? npcs.companion.name : '—'}</span></div>`;
 }
 
+// ---------- Inventory ----------
+function toggleInventory() {
+  const open = !inventoryOpen();
+  inventoryEl.classList.toggle('hidden', !open);
+  if (open) { renderInventory(); if (document.pointerLockElement) document.exitPointerLock(); }
+  else relock();
+}
+function renderInventory() {
+  const cBox = document.getElementById('inv-consumables');
+  const ids = Object.keys(player.consumables).filter(id => player.consumables[id] > 0);
+  cBox.innerHTML = ids.length ? ids.map(id => {
+    const c = CONSUMABLES[id]; if (!c) return '';
+    return `<div class="inv-row"><div class="info"><b>${c.name} ×${player.consumables[id]}</b><small>${c.desc}</small></div>
+      <button class="use-btn" data-use="${id}">USE</button></div>`;
+  }).join('') : '<div class="inv-row empty">empty — buy supplies at the Mask Market</div>';
+  cBox.querySelectorAll('.use-btn').forEach(b => b.onclick = () => { useConsumable(player, b.dataset.use); renderInventory(); });
+
+  const kBox = document.getElementById('inv-keyitems');
+  kBox.innerHTML = player.keyItems.length ? player.keyItems.map(k =>
+    `<div class="inv-row"><div class="info"><b>${k.name}</b><small>${k.desc}</small></div></div>`).join('')
+    : '<div class="inv-row empty">no relics yet — bosses and haunts hold the best</div>';
+}
+
+// ---------- Perks ----------
+function togglePerks() {
+  const open = !perksOpen();
+  perksEl.classList.toggle('hidden', !open);
+  if (open) { renderPerks(); if (document.pointerLockElement) document.exitPointerLock(); }
+  else relock();
+}
+function renderPerks() {
+  document.getElementById('perk-points').textContent = `· ${player.skillPoints} point${player.skillPoints === 1 ? '' : 's'}`;
+  const grid = document.getElementById('perks-grid');
+  grid.innerHTML = PERKS.map(perk => {
+    const owned = player.perks.includes(perk.id);
+    const c = canBuy(player, perk);
+    const btn = owned ? `<span class="pc-owned">✓ owned</span>`
+      : `<button class="pc-buy" data-perk="${perk.id}" ${c.ok ? '' : 'disabled'}>${c.ok ? `take · ${perk.cost} pt` : c.why}</button>`;
+    return `<div class="perk-card ${owned ? 'owned' : ''}"><div class="pc-cat">${perk.cat}</div>
+      <div class="pc-name">${perk.name}</div><div class="pc-desc">${perk.desc}</div>${btn}</div>`;
+  }).join('');
+  grid.querySelectorAll('.pc-buy').forEach(b => b.onclick = () => { buyPerk(player, b.dataset.perk); renderPerks(); });
+}
+
 // ---------- Ending ----------
 function showEnding(ending) {
   const data = ENDINGS[ending] || ENDINGS.seal;
@@ -381,6 +458,13 @@ function updateHUD(dt) {
   document.getElementById('bloodmoon-overlay').style.opacity = (world._blood || 0).toFixed(2);
 
   renderSpellbar();
+
+  // stealth indicator
+  const stEl = document.getElementById('stealth');
+  stEl.classList.toggle('seen', player.detected);
+  stEl.classList.toggle('crouch', player.crouched);
+  document.getElementById('stealth-text').textContent =
+    player.detected ? 'SPOTTED' : (player.crouched ? 'SNEAKING' : 'HIDDEN');
 
   const near = uiBlocking() ? null : getNearest();
   const prompt = document.getElementById('prompt');
@@ -477,7 +561,7 @@ function beginGame(loadSave) {
   started = true;
   quests.start();
   if (loadSave) save.load();
-  canvas.requestPointerLock();
+  if (!isTouchDevice()) canvas.requestPointerLock();
 }
 document.getElementById('begin').addEventListener('click', () => beginGame(false));
 document.getElementById('respawn').addEventListener('click', () => {

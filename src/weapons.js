@@ -144,10 +144,12 @@ export class Weapons {
     if (this.spellCd > 0) return;
     const s = this.equippedSpell();
     if (!this.spellUnlocked(s)) { showToast(`${s.name} needs Hex ${s.reqHex}`); return; }
-    if (this.player.wisp < s.cost) { showToast('Not enough Wisp.'); return; }
-    this.player.wisp -= s.cost;
+    const cost = Math.round(s.cost * this.player.spellCostMult);
+    if (this.player.wisp < cost) { showToast('Not enough Wisp.'); return; }
+    this.player.wisp -= cost;
     this.spellCd = s.cd;
     s.cast();
+    this.enemies.alert(this.player.pos, 16);   // magic crackles
     this._updateAmmoHUD();
   }
 
@@ -159,8 +161,9 @@ export class Weapons {
   _fireGun() {
     if (this.fireCd > 0 || this.reloadT > 0) return;
     if (this.ammo <= 0) { this.reload(); return; }
-    this.ammo--; this.fireCd = 0.28;
+    this.ammo--; this.fireCd = 0.28 * this.player.fireCdMult;
     this.audio.gunshot();
+    this.enemies.alert(this.player.pos, 32);   // gunshots are loud
     this.player.recoilKick += 0.05 + Math.random() * 0.02;
     // muzzle flash
     this.muzzle.intensity = 4; this.flashSprite.material.opacity = 0.9;
@@ -171,7 +174,7 @@ export class Weapons {
     this.raycaster.set(this.camera.getWorldPosition(new THREE.Vector3()), dir);
     this.raycaster.far = 200;
     const crit = this.ammo === 0;
-    let dmg = (16 + this.player.stats.aim * 2) * (crit ? 2.5 : 1);
+    let dmg = (16 + this.player.stats.aim * 2) * (crit ? 2.5 : 1) * this.player.gunDmgMult;
     const hit = this.enemies.raycastHit(this.raycaster);
     if (hit) {
       this.enemies.applyDamage(hit.enemy, dmg, hit.point, 'silver', crit);
@@ -184,7 +187,7 @@ export class Weapons {
 
   reload() {
     if (this.mode !== 'gun' || this.reloadT > 0 || this.ammo === this.ammoMax) return;
-    this.reloadT = 1.1;
+    this.reloadT = 1.1 * this.player.reloadMult;
     this.audio.reloadClick();
     this._updateAmmoHUD();
   }
@@ -289,6 +292,8 @@ export class Weapons {
     document.getElementById('flash').classList.add('go');
     const p = this.player.pos;
     this.enemies.flareBurst(p, 16);
+    this.enemies.alert(p, 22);
+    if (this.player.flareHeals) this.player.heal(20);
     this.player.relieveDread(18);
     showToast('LANTERN FLARE — the dark recoils');
   }

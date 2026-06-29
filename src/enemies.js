@@ -32,6 +32,11 @@ export class Enemies {
   // ---------- factory ----------
   _register(e) {
     e.id = _eid++;
+    // stealth: enemies start unaware and only hunt once they detect you
+    const AGGRO = { scarecrow: 16, jackling: 19, ghost: 14, doll: 15, werebeast: 22, leech: 18 };
+    if (e.aware === undefined) e.aware = !!e.isBoss;
+    if (e.aggro === undefined) e.aggro = e.isBoss ? 999 : (AGGRO[e.type] || 16);
+    e.homeX = e.group.position.x; e.homeZ = e.group.position.z;
     this.list.push(e);
     e.group.traverse(o => { if (o.isMesh) { o.userData.enemy = e; this.hitMeshes.push(o); } });
     this.scene.add(e.group);
@@ -374,7 +379,10 @@ export class Enemies {
       return;
     }
     const mult = e.resist?.[type] ?? 1;
-    e.hp -= dmg * mult;
+    // sneak attack: striking an unaware enemy hits far harder
+    let sneak = 1;
+    if (!e.aware && !e.isBoss) { sneak = this.player.sneakMult; e.aware = true; showToast('SNEAK ATTACK'); }
+    e.hp -= dmg * mult * sneak;
     e.stagger = Math.min(0.35, 0.12 + dmg * 0.003);
     this.audio.thud(e.type === 'jackling' ? 140 : 90);
     this._spawnHitFx(point ?? e.group.position, type);
@@ -407,6 +415,7 @@ export class Enemies {
         this.player.stats.aim += 2; this.player.flags && (this.player.flags.duelPistol = true);
         if (this.player.weaponsRef) { this.player.weaponsRef.ammoMax += 1; this.player.weaponsRef.ammo = this.player.weaponsRef.ammoMax; }
         if (this.factions) this.factions.modify('wardens', 10);
+        this.player.addKeyItem('widowmaker', "The Widowmaker's Waltz", 'A dueling pistol that hums when music plays. (+2 Aim, +1 capacity)');
         showToast("THE WIDOWMAKER'S WALTZ — +2 Aim, +1 capacity. A pistol that hums when music plays.");
         whisper('“…well dueled. do call again.”');
         if (this.onCountDefeated) this.onCountDefeated();
@@ -499,15 +508,17 @@ export class Enemies {
     // ambient spawns
     this._ambientSpawn(dt);
 
-    let nearDread = 0;
+    let nearDread = 0, anyAware = false;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const e = this.list[i];
       this._think(e, dt, p);
       const d = dist2D(p.x, p.z, e.group.position.x, e.group.position.z);
+      if (!e.dead && e.aware && !e.isBoss && d < 60) anyAware = true;
       if (!e.dead && d < 14) nearDread += e.dread * (1 - d / 14);
       // despawn far ambient (not boss)
       if (!e.isBoss && !e.dead && d > 130) this._deregister(e);
     }
+    this.player.detected = anyAware;
     // proximity feeds Dread
     if (nearDread > 0) this.player.addDread(nearDread * dt * 6);
 
@@ -619,6 +630,12 @@ export class Enemies {
     // keep grounded
     const gy = this.world.getHeight(e.group.position.x, e.group.position.z);
 
+    // ---- stealth: unaware enemies idle until they detect you ----
+    if (!e.aware && !e.isBoss) {
+      if (this._detect(e, p)) { e.aware = true; e.alertedT = 0.4; }
+      else { this._idle(e, dt, gy); return; }
+    }
+
     if (e.type === 'scarecrow') {
       const watched = this._isWatched(e);
       const d = dist2D(p.x, p.z, e.group.position.x, e.group.position.z);
@@ -723,11 +740,50 @@ export class Enemies {
     }
   }
 
+  // can this enemy notice the player right now?
+  _detect(e, p) {
+    const d = dist2D(p.x, p.z, e.group.position.x, e.group.position.z);
+    if (d < 2.8) return true;                       // right on top of it
+    const range = e.aggro * (0.45 + this.player.noise * 0.95);
+    if (d > range) return false;
+    // in front of the enemy is easier to spot; behind it relies on noise
+    const toP = new THREE.Vector3(p.x - e.group.position.x, 0, p.z - e.group.position.z).normalize();
+    const fwd = new THREE.Vector3(Math.sin(e.group.rotation.y), 0, Math.cos(e.group.rotation.y));
+    const facing = toP.dot(fwd) > -0.2;
+    return facing || this.player.noise > 0.5;
+  }
+
+  // wander quietly near home until alerted
+  _idle(e, dt, gy) {
+    e._idleT = (e._idleT || 0) - dt;
+    if (e._idleT <= 0) { e._idleT = 2 + Math.random() * 3.5; e._idleDir = Math.random() * TAU; }
+    const sp = e.speed * 0.16 * dt;
+    const nx = e.group.position.x + Math.cos(e._idleDir) * sp;
+    const nz = e.group.position.z + Math.sin(e._idleDir) * sp;
+    if (dist2D(nx, nz, e.homeX, e.homeZ) < 9) { e.group.position.x = nx; e.group.position.z = nz; }
+    e.group.rotation.y = e._idleDir;
+    let hover = 0;
+    if (e.type === 'jackling') hover = e.hover + Math.sin(performance.now() * 0.006 + e.id) * 0.15;
+    else if (e.type === 'ghost') { hover = 0.2 + Math.sin(performance.now() * 0.002) * 0.2; if (e.mat) e.mat.opacity = 0.18; }
+    else if (e.type === 'doll') hover = Math.abs(Math.sin(performance.now() * 0.006 + e.id)) * 0.1;
+    e.group.position.y = this.world.getHeight(e.group.position.x, e.group.position.z) + hover;
+  }
+
+  // a gunshot / loud spell / flare wakes everything nearby
+  alert(pos, radius) {
+    for (const e of this.list) {
+      if (e.dead || e.aware) continue;
+      if (dist2D(pos.x, pos.z, e.group.position.x, e.group.position.z) < radius) e.aware = true;
+    }
+  }
+
   _tryAttack(e, dt, p, d) {
     e.atkCd = Math.max(0, e.atkCd - dt);
     if (d <= e.atkRange && e.atkCd <= 0 && e.stagger <= 0) {
       e.atkCd = 1.4;
       this.player.damage(e.dmg, e.type);
+      // Bramble Skin perk: attackers take recoil damage
+      if (this.player.thornMail > 0 && !e.dead) { e.hp -= this.player.thornMail; if (e.hp <= 0) this._kill(e); }
       // little lunge
       const dir = new THREE.Vector3(p.x - e.group.position.x, 0, p.z - e.group.position.z).normalize();
       e.group.position.x += dir.x * 0.3; e.group.position.z += dir.z * 0.3;

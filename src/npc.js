@@ -136,18 +136,18 @@ export class NPCs {
   _wireShop() {
     this.shopEl = document.getElementById('shop');
     this.SHOP = [
-      { id: 'broth', name: 'Bonebroth Flask', desc: 'Restores all Vitality.', cost: 15,
-        buy: (pl) => { pl.hp = pl.maxHP; } },
-      { id: 'wisp', name: 'Wisp Draught', desc: 'Restores all Wisp.', cost: 10,
-        buy: (pl) => { pl.wisp = pl.maxWisp; } },
+      { id: 'broth', name: 'Bonebroth Flask ×1', desc: 'Carry it; drink later (H) to heal.', cost: 14,
+        buy: (pl) => { pl.addConsumable('bonebroth', 1); } },
+      { id: 'wispd', name: 'Wisp Draught ×1', desc: 'Carry it; use from inventory (I).', cost: 10,
+        buy: (pl) => { pl.addConsumable('wisp', 1); } },
+      { id: 'wardc', name: 'Salt-Ward Charm ×1', desc: 'Carry it; use to shed Dread.', cost: 16,
+        buy: (pl) => { pl.addConsumable('saltward', 1); } },
       { id: 'silver', name: 'Silver Cylinder Mod', desc: '+1 revolver capacity (permanent).', cost: 45,
         buy: (pl) => { pl.weaponsRef.ammoMax += 1; pl.weaponsRef.ammo = pl.weaponsRef.ammoMax; } },
       { id: 'grit', name: "Warden's Tonic", desc: '+1 Grit (permanent).', cost: 70,
         buy: (pl) => { pl.stats.grit += 1; } },
       { id: 'hex', name: 'Shard of Hexglass', desc: '+1 Hex (permanent).', cost: 70,
         buy: (pl) => { pl.stats.hex += 1; } },
-      { id: 'ward', name: 'Salt-Ward Charm', desc: 'Relieves all Dread now.', cost: 20,
-        buy: (pl) => { pl.relieveDread(100); } },
     ];
   }
 
