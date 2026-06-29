@@ -705,6 +705,7 @@ function loop() {
     bells.update(dt);
     quests.update(dt);
     world.update(dt, player.pos);
+    interiors.update(dt);
     save.update(dt);
   } else {
     world.update(dt * 0.15, player.pos);

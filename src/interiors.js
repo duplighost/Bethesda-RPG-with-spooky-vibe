@@ -10,7 +10,7 @@
 //    or get baked into a pie.
 // ============================================================
 import * as THREE from 'three';
-import { dist2D, showToast, whisper } from './utils.js';
+import { dist2D, clamp, showToast, whisper } from './utils.js';
 
 const CEIL = 0x140f12;
 
@@ -33,6 +33,41 @@ export class Interiors {
     ];
     // align door triggers to the actual doorway (front wall, world space)
     this._placeDoors();
+    // a diegetic threshold lantern at each doorway, so entrances read at night
+    this._buildDoorGlows();
+  }
+
+  _buildDoorGlows() {
+    this.doorGlows = [];
+    for (const d of this.doors) {
+      const grp = new THREE.Group();
+      grp.position.set(d.x, this.world.getHeight(d.x, d.z), d.z);
+      const lamp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.world._glowTex, color: 0xff9a3c, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false }));
+      lamp.scale.setScalar(1.6); lamp.position.y = 2.3; grp.add(lamp);
+      const sill = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.world._glowTex, color: 0xffb152, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false }));
+      sill.scale.setScalar(2.2); sill.position.y = 0.45; grp.add(sill);
+      this.scene.add(grp);
+      this.doorGlows.push({ grp, lamp, sill, x: d.x, z: d.z, t: Math.random() * 6 });
+    }
+  }
+
+  // animate the threshold lanterns: a steady glow that flickers, brightens on
+  // approach and on the blood moon, and snuffs out while you're inside.
+  update(dt) {
+    if (!this.doorGlows) return;
+    const inside = !!this.active;
+    const pp = this.player.pos;
+    const blood = (this.world.isBloodMoon && this.world.isBloodMoon()) ? 1 : 0;
+    for (const g of this.doorGlows) {
+      g.t += dt;
+      if (inside) { g.lamp.material.opacity = 0; g.sill.material.opacity = 0; continue; }
+      const d = dist2D(pp.x, pp.z, g.x, g.z);
+      const near = clamp(1 - d / 60, 0, 1);                         // readable from afar
+      const flick = 0.82 + 0.18 * Math.sin(g.t * 5) * Math.sin(g.t * 1.7);
+      g.lamp.material.opacity = (0.32 + near * 0.5 + blood * 0.18) * flick;
+      g.lamp.scale.setScalar(1.5 + near * 0.5 + blood * 0.3);
+      g.sill.material.opacity = (0.16 + near * 0.34) * flick;
+    }
   }
 
   _placeDoors() {
