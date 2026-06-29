@@ -159,11 +159,13 @@ enemies.warden = warden;
 npcs.factions = factions;
 npcs.wardenRef = warden;
 quests.bellsRef = bells;
+quests.itemsRef = items;
 bells.onSilence = () => warden.onBellSilenced();
 save.factions = factions;
 save.bells = bells;
 save.warden = warden;
 save.reapplyPerks = reapplyPerks;
+save.onLoaded = () => items.syncCollected();
 enemies.onBossDefeated = () => { quests.onBossDefeated(); bells.onMarrowJack(); };
 enemies.onEngineDefeated = () => bells.setEngineDead();
 bells.onEnding = (ending) => showEnding(ending);
@@ -443,6 +445,16 @@ function renderJournal() {
     `<div class="j-row"><span>Soulgilt</span><span class="v">◉ ${player.coin}</span></div>` +
     Object.entries(st).map(([k, v]) => `<div class="j-row"><span>${k[0].toUpperCase() + k.slice(1)}</span><span class="v">${v}</span></div>`).join('') +
     `<div class="j-row"><span>Companion</span><span class="v">${npcs.companion ? npcs.companion.name : '—'}</span></div>`;
+
+  const relicBox = document.getElementById('j-relics');
+  if (relicBox) {
+    const relics = items.relicStatus();
+    const found = relics.filter(r => r.found).length;
+    relicBox.innerHTML = relics.map(r => r.found
+      ? `<div class="j-bell">☙ ${r.title} <span class="d">— ${r.boon}</span></div>`
+      : `<div class="j-bell unresolved">○ <span class="d">${r.rumor}</span></div>`
+    ).join('') + `<div class="j-bell" style="margin-top:6px">Relics recovered: <b>${found}</b> / ${relics.length}</div>`;
+  }
 }
 
 // ---------- Inventory ----------
@@ -704,4 +716,4 @@ function loop() {
 }
 loop();
 
-window.HALLOWIND = { scene, world, player, enemies, weapons, quests, npcs, interiors, events, save, dialogue, factions, bells, warden };
+window.HALLOWIND = { scene, world, player, enemies, weapons, quests, npcs, interiors, events, save, dialogue, factions, bells, warden, items };

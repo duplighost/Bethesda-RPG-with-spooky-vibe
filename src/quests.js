@@ -14,6 +14,7 @@ export class Quests {
     this.step = 0;
     this.flags = { lanternUsed: false, ledgerRead: false, nameFound: false, bossDead: false };
     this.visited = new Set();
+    this._rumored = new Set();   // regions whose relic rumor has been whispered
     this.steps = [
       { text: 'Wake. Light the lantern fused to your hand — press F.',
         done: () => this.player.lanternOn },
@@ -57,7 +58,9 @@ export class Quests {
       whisper('a name is a leash');
     }
   }
-  onLoot() {}
+  onLoot(l) {
+    if (l && l.relic) { showToast(`You pocket ${l.title}.`); whisper('the county gives up one of its small, terrible treasures'); }
+  }
 
   onBossDefeated() {
     this.flags.bossDead = true;
@@ -76,12 +79,19 @@ export class Quests {
     // region discovery
     const p = this.player.pos;
     const reg = this.world.regionAt(p.x, p.z);
-    if (!this.visited.has(reg.id) && this._inRegion(p, reg)) {
+    const inReg = this._inRegion(p, reg);
+    if (!this.visited.has(reg.id) && inReg) {
       this.visited.add(reg.id);
       if (reg.id !== 'gravewick') {
         showToast(`Entering ${reg.name}`);
         this.audio.ghostHiss();
       }
+    }
+    // Whisper a one-time rumor for an undiscovered relic in this region (skip the
+    // start village — Gravewick's relic is surfaced through the journal instead).
+    if (inReg && reg.id !== 'gravewick' && this.itemsRef && !this._rumored.has(reg.id)) {
+      const relic = this.itemsRef.relicStatus().find(r => r.region === reg.id && !r.found);
+      if (relic) { this._rumored.add(reg.id); whisper(relic.rumor); }
     }
     // advance objective
     const cur = this.steps[this.step];

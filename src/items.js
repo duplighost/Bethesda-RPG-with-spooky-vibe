@@ -79,14 +79,22 @@ export const LOOT = [
     icon: 0xff7a18, grant: () => ({ stat: 'guile', amount: 2 }) },
   { x: -300, z: 180, title: 'Forbidden Harvestcraft Page', body: '+Hex. Your witchfire burns greener.',
     icon: 0x8dff6a, grant: () => ({ stat: 'hex', amount: 3 }) },
-  { x: -120, z: -64, title: "The Drowned Saint's Thimble", body: '+Presence, and the dead whisper softer. The right word lands now where the gun would not.',
-    icon: 0x9fd0ff, grant: () => ({ stat: 'presence', amount: 2, dread: -10 }) },
-  { x: 150, z: 92, title: 'Union Furnace Scrip', body: '+Grit, and a fold of brass county coin.',
-    icon: 0xffcf6a, grant: () => ({ stat: 'grit', amount: 1, coin: 90 }) },
-  { x: -184, z: -158, title: 'Moon-Splinter Lens', body: '+Instinct. The fog thins a little when you look through it.',
-    icon: 0xbfe9ff, grant: () => ({ stat: 'instinct', amount: 2 }) },
-  { x: 236, z: 206, title: 'The Thirteenth Place Card', body: '+Wits, and the memory of a chair left empty at a long table.',
-    icon: 0xd8b0ff, grant: () => ({ stat: 'wits', amount: 2, xp: 60 }) },
+  { x: 48, z: 332, title: "The Drowned Saint's Thimble", body: '+Presence, and the dead whisper softer. The right word lands now where the gun would not.',
+    icon: 0x9fd0ff, relic: true, region: 'gallowsfen', boon: '+2 Presence, −10 Dread',
+    rumor: 'In Gallowsfen they drowned a saint with her church. Her thimble surfaces in the black water when the fen runs low.',
+    grant: () => ({ stat: 'presence', amount: 2, dread: -10 }) },
+  { x: -306, z: -244, title: 'Union Furnace Scrip', body: '+Grit, and a fold of brass county coin.',
+    icon: 0xffcf6a, relic: true, region: 'ashfall', boon: '+1 Grit, +90 Soulgilt',
+    rumor: 'The pay-shacks at Ashfall Works still hold furnace-scrip — brass tokens the dead never lived to spend.',
+    grant: () => ({ stat: 'grit', amount: 1, coin: 90 }) },
+  { x: -288, z: 196, title: 'Moon-Splinter Lens', body: '+Instinct. The fog thins a little when you look through it.',
+    icon: 0xbfe9ff, relic: true, region: 'mournwood', boon: '+2 Instinct',
+    rumor: 'A lens that once caught the full moon is lost among the hanged trees of Mournwood. It still glints on clear nights.',
+    grant: () => ({ stat: 'instinct', amount: 2 }) },
+  { x: -66, z: 71, title: 'The Thirteenth Place Card', body: '+Wits, and the memory of a chair left empty at a long table.',
+    icon: 0xd8b0ff, relic: true, region: 'gravewick', boon: '+2 Wits, +60 XP',
+    rumor: 'Bellweather’s long table is laid for thirteen. Twelve seats hold ash; a place-card still waits at the empty head.',
+    grant: () => ({ stat: 'wits', amount: 2, xp: 60 }) },
 ];
 
 export class Items {
@@ -197,7 +205,27 @@ export class Items {
       }
       showToast(parts.length ? `${l.title} — ${parts.join(', ')}` : l.title);
     } else showToast(l.title);
+    if (!this.player.collectedLoot.includes(l.title)) this.player.collectedLoot.push(l.title);
     this.quests?.onLoot(l);
+  }
+
+  // Relics surfaced in the journal: discovered ones by name+boon, the rest as cryptic rumors.
+  relicStatus() {
+    return this.interactables
+      .filter(it => it.kind === 'loot' && it.data.relic)
+      .map(it => ({ title: it.data.title, rumor: it.data.rumor, boon: it.data.boon,
+                    region: it.data.region, found: !!it.used }));
+  }
+
+  // After a save is loaded, hide loot the player already collected so it can't respawn.
+  syncCollected() {
+    const taken = this.player.collectedLoot || [];
+    for (const it of this.interactables) {
+      if (it.kind === 'loot' && !it.used && taken.includes(it.data.title)) {
+        it.used = true;
+        this.scene.remove(it.obj);
+      }
+    }
   }
 
   _openReader(title, body) {

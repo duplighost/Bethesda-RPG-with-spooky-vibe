@@ -67,6 +67,7 @@ export class Player {
     // inventory
     this.consumables = {};   // id -> count
     this.keyItems = [];      // [{id,name,desc}]
+    this.collectedLoot = []; // titles of picked-up loot/relics (so they don't respawn on reload)
 
     // crouch / stealth
     this.crouched = false;

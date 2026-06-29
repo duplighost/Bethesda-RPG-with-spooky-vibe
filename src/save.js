@@ -23,6 +23,7 @@ export class Save {
       maxHP: p.maxHP, hp: p.hp, maxWisp: p.maxWisp, wisp: p.wisp,
       dread: p.dread, coin: p.coin, skillPoints: p.skillPoints,
       consumables: p.consumables, keyItems: p.keyItems, perks: p.perks,
+      collectedLoot: p.collectedLoot,
       lanternOn: p.lanternOn, flags: p.flags, background: p.background,
       ammoMax: this.weapons.ammoMax,
       questStep: this.quests.step, questFlags: this.quests.flags,
@@ -56,7 +57,9 @@ export class Save {
     p.consumables = data.consumables || {};
     p.keyItems = data.keyItems || [];
     p.perks = data.perks || [];
+    p.collectedLoot = data.collectedLoot || [];
     if (this.reapplyPerks) this.reapplyPerks(p);
+    if (this.onLoaded) this.onLoaded();
     if (data.lanternOn && !p.lanternOn) p.toggleLantern();
     this.weapons.ammoMax = data.ammoMax || 6; this.weapons.ammo = this.weapons.ammoMax;
 
