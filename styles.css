@@ -45,6 +45,16 @@ canvas#game{position:fixed;inset:0;display:block}
   background:radial-gradient(circle at 50% 50%,transparent 30%,rgba(50,10,60,.0) 55%,rgba(80,15,90,.35) 100%);
   mix-blend-mode:screen;transition:opacity .8s}
 
+#bloodmoon-overlay{position:absolute;inset:0;pointer-events:none;opacity:0;
+  background:radial-gradient(circle at 50% 30%,rgba(120,8,10,.35),rgba(40,0,4,0) 60%),
+             linear-gradient(0deg,rgba(80,4,8,.25),transparent 40%);
+  mix-blend-mode:multiply;transition:opacity 1.6s}
+#bloodmoon-overlay.on{opacity:1}
+#bloodmoon-banner{position:absolute;left:50%;top:22%;transform:translateX(-50%);
+  font-size:34px;letter-spacing:10px;color:#e23b2a;text-shadow:0 0 24px #500,0 2px 6px #000;
+  opacity:0;transition:opacity 1s;pointer-events:none;text-align:center}
+#bloodmoon-banner.show{opacity:.95}
+
 #flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
 #flash.go{animation:flashfx .5s ease-out}
 @keyframes flashfx{0%{opacity:.9}100%{opacity:0}}

@@ -132,6 +132,7 @@ export class Bells {
     }
     this.curse = Math.max(0, Math.min(100, this.curse));
     this.audio.bell(disp === 'feed' ? 150 : 240);
+    if (disp === 'silence' && this.onSilence) this.onSilence();
 
     // open the endgame once most bells are dealt with
     if (this.resolved >= 4 && !this.altar) this._raiseAltar();

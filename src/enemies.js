@@ -179,7 +179,64 @@ export class Enemies {
     });
   }
 
+  // Parlor Leech — ambient vampire aristocrat. Heals when it bites.
+  spawnParlorLeech(x, z, weak = false) {
+    const g = new THREE.Group();
+    const coat = new THREE.MeshStandardMaterial({ color: 0x140a14, roughness: 0.7, metalness: 0.1 });
+    const skin = new THREE.MeshStandardMaterial({ color: 0xe6ded6, roughness: 0.4 });
+    const body = new THREE.Mesh(new THREE.ConeGeometry(0.32, 1.7, 8), coat);
+    body.position.y = 0.9; body.castShadow = true; g.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), skin);
+    head.position.y = 1.95; head.castShadow = true; g.add(head);
+    const tie = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.04), new THREE.MeshStandardMaterial({ color: 0x8a1020, emissive: 0x300008, emissiveIntensity: 0.5 }));
+    tie.position.set(0, 1.5, 0.28); g.add(tie);
+    const em = new THREE.MeshBasicMaterial({ color: 0xb6202a });
+    const e1 = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), em); e1.position.set(-0.08, 1.98, 0.2); g.add(e1);
+    const e2 = e1.clone(); e2.position.x = 0.08; g.add(e2);
+    g.position.set(x, this.world.getHeight(x, z), z);
+    return this._register({
+      type: 'leech', group: g, head,
+      hp: weak ? 30 : 70, maxHp: weak ? 30 : 70, speed: weak ? 7 : 6.2, dmg: weak ? 9 : 14, atkCd: 0, atkRange: 2.2,
+      state: 'hunt', stagger: 0, dead: false, dyingT: 0, drains: true,
+      resist: { silver: 1.5, witchfire: 0.9 }, dread: 0.4, xp: weak ? 14 : 30,
+    });
+  }
+
   // ---------- boss ----------
+  spawnPorcelainCount(x, z) {
+    if (this.count) return;
+    const g = new THREE.Group();
+    const coat = new THREE.MeshStandardMaterial({ color: 0x0e0a12, roughness: 0.5, metalness: 0.2 });
+    const porc = new THREE.MeshStandardMaterial({ color: 0xeae2da, roughness: 0.25, metalness: 0.05 });
+    const torso = new THREE.Mesh(new THREE.ConeGeometry(0.55, 2.6, 8), coat);
+    torso.position.y = 1.4; torso.castShadow = true; g.add(torso);
+    const face = new THREE.Mesh(new THREE.SphereGeometry(0.34, 16, 16), porc);
+    face.position.y = 3.0; face.castShadow = true; g.add(face);
+    // cracked porcelain mask seams + red eyes
+    const em = new THREE.MeshBasicMaterial({ color: 0xb6202a });
+    const e1 = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), em); e1.position.set(-0.12, 3.05, 0.28); g.add(e1);
+    const e2 = e1.clone(); e2.position.x = 0.12; g.add(e2);
+    // red cravat
+    const cravat = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.7, 0.06), new THREE.MeshStandardMaterial({ color: 0x8a1020, emissive: 0x400010, emissiveIntensity: 0.7 }));
+    cravat.position.set(0, 2.3, 0.45); g.add(cravat);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.world._glowTex, color: 0xb06adf, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
+    halo.scale.setScalar(4); halo.position.y = 3; g.add(halo);
+    g.position.set(x, this.world.getHeight(x, z), z); g.scale.setScalar(1.5);
+    const boss = this._register({
+      type: 'boss', group: g, face,
+      hp: 850, maxHp: 850, speed: 6.5, dmg: 26, atkCd: 0, atkRange: 3,
+      state: 'hunt', stagger: 0, dead: false, dyingT: 0, phase: 1,
+      resist: { silver: 1.2, witchfire: 0.85 }, dread: 0, xp: 650, isBoss: true,
+      bossKind: 'count', addCd: 4, dashCd: 2,
+    });
+    this.count = boss; this.boss = boss;
+    this._showBossBar('THE PORCELAIN COUNT');
+    this.audio.bossRoar();
+    showToast('THE PORCELAIN COUNT requests the pleasure of your death');
+    whisper('“you have tracked mud onto my century”');
+    return boss;
+  }
+
   spawnBoss(x, z) {
     if (this.boss) return;
     const g = new THREE.Group();
@@ -330,6 +387,7 @@ export class Enemies {
     this.kills++;
     this.player.addXP(e.xp);
     if (this.factions) this.factions.onKill(e);
+    if (this.warden) this.warden.onKill(e);
     if (e.onDeath) e.onDeath();
     // drop soulgilt currency
     const reward = Math.max(1, Math.round(e.xp * (e.isBoss ? 0.5 : 0.4)));
@@ -344,6 +402,14 @@ export class Enemies {
         showToast('The Harvest Engine seizes. Seventy-three Octobers of overtime, ended.');
         whisper('the foundry bell is free');
         if (this.onEngineDefeated) this.onEngineDefeated();
+      } else if (e.bossKind === 'count') {
+        this.count = null; this.boss = null;
+        this.player.stats.aim += 2; this.player.flags && (this.player.flags.duelPistol = true);
+        if (this.player.weaponsRef) { this.player.weaponsRef.ammoMax += 1; this.player.weaponsRef.ammo = this.player.weaponsRef.ammoMax; }
+        if (this.factions) this.factions.modify('wardens', 10);
+        showToast("THE WIDOWMAKER'S WALTZ — +2 Aim, +1 capacity. A pistol that hums when music plays.");
+        whisper('“…well dueled. do call again.”');
+        if (this.onCountDefeated) this.onCountDefeated();
       } else {
         this.boss = null;
         showToast('Marrow Jack falls. The field exhales.');
@@ -474,9 +540,11 @@ export class Enemies {
   _ambientSpawn(dt) {
     if (this.suspended) return;
     this.spawnCd -= dt;
+    const danger = this.world.danger || 1;
+    const cap = Math.round(this.maxAmbient * danger);
     const alive = this.list.filter(e => !e.dead && !e.isBoss).length;
-    if (this.spawnCd > 0 || alive >= this.maxAmbient) return;
-    this.spawnCd = randRange(Math.random, 1.6, 3.4);
+    if (this.spawnCd > 0 || alive >= cap) return;
+    this.spawnCd = randRange(Math.random, 1.6, 3.4) / danger;
     const p = this.player.pos;
     const reg = this.world.regionAt(p.x, p.z);
     // spawn just out of comfortable view
@@ -504,9 +572,11 @@ export class Enemies {
       else if (roll < 0.9) this.spawnScarecrow(x, z);
       else this.spawnJackling(x, z);
     } else {
-      if (roll < 0.4) this.spawnScarecrow(x, z);
-      else if (roll < 0.7) this.spawnJackling(x, z);
-      else this.spawnGhost(x, z);
+      // Gravewick / Candlewick — townsfolk monsters incl. parlor vampires
+      if (roll < 0.32) this.spawnScarecrow(x, z);
+      else if (roll < 0.55) this.spawnJackling(x, z);
+      else if (roll < 0.78) this.spawnGhost(x, z);
+      else this.spawnParlorLeech(x, z);
     }
   }
 
@@ -588,6 +658,12 @@ export class Enemies {
       e.group.position.y = gy + Math.abs(Math.sin(performance.now() * 0.012 + e.id)) * 0.12;
       this._tryAttack(e, dt, p, d);
     }
+    else if (e.type === 'leech') {
+      const d = this._faceAndStep(e, dt, p, e.stagger > 0);
+      e.group.position.y = gy + Math.sin(performance.now() * 0.004 + e.id) * 0.12;
+      const bit = this._tryAttack(e, dt, p, d);
+      if (bit && e.drains) e.hp = Math.min(e.maxHp, e.hp + 8); // drains life
+    }
     else if (e.type === 'ghost') {
       e.phaseT += dt;
       // ghosts drift, fade in/out; only solid (vulnerable) when in lantern light
@@ -600,7 +676,50 @@ export class Enemies {
       this._tryAttack(e, dt, p, d);
     }
     else if (e.type === 'boss') {
-      this._bossThink(e, dt, p, gy);
+      if (e.bossKind === 'count') this._countThink(e, dt, p, gy);
+      else this._bossThink(e, dt, p, gy);
+    }
+  }
+
+  _countThink(e, dt, p, gy) {
+    e.group.position.y = gy;
+    const d = this._faceAndStep(e, dt, p, e.stagger > 0);
+    e.group.rotation.y = Math.atan2(p.x - e.group.position.x, p.z - e.group.position.z);
+    e.face.rotation.y = Math.sin(performance.now() * 0.003) * 0.3;
+    this._tryAttack(e, dt, p, d);
+
+    const frac = e.hp / e.maxHp;
+    if (frac < 0.66 && e.phase === 1) { e.phase = 2; this.audio.bossRoar(); whisper('“then we dance with the help”'); }
+    if (frac < 0.33 && e.phase === 2) { e.phase = 3; this.audio.bossRoar(); whisper('“if you will not bow, you will SHATTER”'); e.speed = 9; }
+
+    // elegant dash toward the player
+    e.dashCd -= dt;
+    if (e.dashCd <= 0 && d > 5) {
+      e.dashCd = e.phase >= 3 ? 1.6 : 3;
+      const dir = new THREE.Vector3(p.x - e.group.position.x, 0, p.z - e.group.position.z).normalize();
+      e.group.position.x += dir.x * 4; e.group.position.z += dir.z * 4;
+    }
+
+    // phase 2+: summon blood-servants
+    if (e.phase >= 2) {
+      e.addCd -= dt;
+      if (e.addCd <= 0) {
+        e.addCd = e.phase >= 3 ? 5 : 7;
+        const leeches = this.list.filter(x => !x.dead && x.type === 'leech').length;
+        if (leeches < 6) {
+          const a = Math.random() * TAU;
+          this.spawnParlorLeech(e.group.position.x + Math.cos(a) * 4, e.group.position.z + Math.sin(a) * 4, true);
+        }
+      }
+    }
+    // phase 3: shatter into porcelain copies that rush you
+    if (e.phase >= 3 && !e._shattered) {
+      e._shattered = true;
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * TAU;
+        const c = this.spawnParlorLeech(e.group.position.x + Math.cos(a) * 3, e.group.position.z + Math.sin(a) * 3, true);
+        c.hp = c.maxHp = 24; c.speed = 9.5; c.dmg = 12;
+      }
     }
   }
 
@@ -612,7 +731,9 @@ export class Enemies {
       // little lunge
       const dir = new THREE.Vector3(p.x - e.group.position.x, 0, p.z - e.group.position.z).normalize();
       e.group.position.x += dir.x * 0.3; e.group.position.z += dir.z * 0.3;
+      return true;
     }
+    return false;
   }
 
   _bossThink(e, dt, p, gy) {

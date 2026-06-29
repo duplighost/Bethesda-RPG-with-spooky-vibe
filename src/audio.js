@@ -184,6 +184,74 @@ export class Audio {
     src.connect(bp).connect(g).connect(this.master); src.start(t); src.stop(t + 1.4);
   }
 
+  // ---- footsteps vary by ground surface ----
+  footstep(surface = 'grass') {
+    if (!this.enabled) return;
+    const t = this.ctx.currentTime;
+    const cfg = {
+      grass:  { f: 80,  type: 'triangle', noise: 0.05, dur: 0.1 },
+      dirt:   { f: 70,  type: 'sine',     noise: 0.04, dur: 0.1 },
+      stone:  { f: 150, type: 'square',   noise: 0.02, dur: 0.05 },
+      wood:   { f: 110, type: 'triangle', noise: 0.03, dur: 0.09 },
+      leaves: { f: 60,  type: 'sine',     noise: 0.14, dur: 0.16 },
+      water:  { f: 50,  type: 'sine',     noise: 0.18, dur: 0.22 },
+      mud:    { f: 45,  type: 'sine',     noise: 0.12, dur: 0.2 },
+      metal:  { f: 240, type: 'square',   noise: 0.03, dur: 0.07 },
+    }[surface] || { f: 80, type: 'triangle', noise: 0.05, dur: 0.1 };
+    const o = this.ctx.createOscillator(); o.type = cfg.type; o.frequency.value = cfg.f * (0.9 + Math.random() * 0.2);
+    const g = this.ctx.createGain(); this._env(g, 0.22, 0.002, cfg.dur, t);
+    o.connect(g).connect(this.master); o.start(t); o.stop(t + cfg.dur + 0.05);
+    if (cfg.noise > 0.02) {
+      const src = this.ctx.createBufferSource(); src.buffer = this._noiseBuffer(0.3);
+      const hp = this.ctx.createBiquadFilter(); hp.type = surface === 'leaves' ? 'highpass' : 'lowpass';
+      hp.frequency.value = surface === 'leaves' ? 2400 : 600;
+      const ng = this.ctx.createGain(); this._env(ng, cfg.noise, 0.002, cfg.dur, t);
+      src.connect(hp).connect(ng).connect(this.master); src.start(t); src.stop(t + cfg.dur + 0.05);
+    }
+  }
+
+  // ---- procedural music: a slow, minor music-box motif ----
+  startMusic(kind = 'menu') {
+    if (!this.enabled) return;
+    this.stopMusic();
+    this.musicGain = this.ctx.createGain();
+    this.musicGain.gain.value = kind === 'menu' ? 0.16 : 0.075;
+    this.musicGain.connect(this.master);
+    // a touch of delay for space
+    const delay = this.ctx.createDelay(); delay.delayTime.value = 0.38;
+    const fb = this.ctx.createGain(); fb.gain.value = 0.32;
+    delay.connect(fb).connect(delay); delay.connect(this.musicGain);
+    this._musicDelay = delay;
+    // A minor-ish scale (Hz), sombre
+    const scale = [220.0, 246.9, 261.6, 293.7, 329.6, 349.2, 392.0, 440.0];
+    let idx = 3, beat = 0;
+    const tempo = kind === 'menu' ? 560 : 820; // ms per note
+    this._musicTimer = setInterval(() => {
+      if (!this.ctx) return;
+      const t = this.ctx.currentTime + 0.02;
+      // random-walk melody, occasional rests
+      idx = Math.max(0, Math.min(scale.length - 1, idx + (Math.floor(Math.random() * 3) - 1)));
+      if (Math.random() > 0.22) this._bell2(scale[idx], t, kind === 'menu' ? 0.5 : 0.34, delay);
+      // a low drone note every 4 beats
+      if (beat % 4 === 0) this._bell2(scale[0] / 2, t, 0.32, this.musicGain);
+      beat++;
+    }, tempo);
+  }
+  stopMusic() {
+    if (this._musicTimer) { clearInterval(this._musicTimer); this._musicTimer = null; }
+    if (this.musicGain) { try { this.musicGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.4); } catch {} }
+  }
+  _bell2(freq, t, peak, dest) {
+    const o = this.ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = freq;
+    const o2 = this.ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = freq * 2.01;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.6);
+    o.connect(g); o2.connect(g); g.connect(dest || this.musicGain || this.master);
+    o.start(t); o2.start(t); o.stop(t + 1.7); o2.stop(t + 1.7);
+  }
+
   bossRoar() {
     if (!this.enabled) return;
     const t = this.ctx.currentTime;

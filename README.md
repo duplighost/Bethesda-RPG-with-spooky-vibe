@@ -37,6 +37,18 @@ capture the mouse (pointer-lock); press **ESC** to release it.
 
 ---
 
+## ☁️ Deploy to Netlify (drag-and-drop)
+
+This is a pure static site — no build step. To host it:
+
+1. Grab **`hallowind.zip`** (the whole site with `index.html` at the archive root).
+2. Go to **app.netlify.com → Sites → "Add new site" → "Deploy manually"**.
+3. **Drag the zip** onto the drop zone. Netlify unpacks it and serves `index.html`.
+
+That's it — there's nothing to configure (a `netlify.toml` is included that sets
+`publish = "."` and the right JS MIME type). Locally you can still just run
+`npm start` or `python3 -m http.server`.
+
 ## 🎮 Controls
 
 | Input | Action |
@@ -149,6 +161,27 @@ capture the mouse (pointer-lock); press **ESC** to release it.
 - **A new interior dungeon — Harrow & Sons Toyworks** — a doll factory whose assembly
   line never stopped; clear the Doll-Mother for *Mother's Spool*.
 
+### …and the endgame tier
+
+- **A night cycle + Blood Moon** — the eternal night drifts through Dusk → Deep Night →
+  the Witching Hour → False Dawn (moon arc, sky/fog/light all shift). Periodically a
+  **Blood Moon** rises: the moon runs red, the screen bleeds, enemy spawns surge, NPCs
+  scurry home, and the bloom flares. (Light cost stays constant — it's all colour math
+  on the existing fixed light pool.)
+- **A third boss — The Porcelain Count** — a vampire aristocrat in **Candlewick Manor**
+  (enter it off Gravewick's wealthy edge): an elegant duel that escalates to summoned
+  blood-servants and a shatter-into-porcelain-copies finale. Clear him for *The
+  Widowmaker's Waltz*. Plus a new ambient **Parlor Leech** vampire that heals when it bites.
+- **A Lantern Wardens questline** — take a contract from Mara Vale: cull husks, banish
+  ghosts, put down something that was almost a person, and silence a bell the clean way.
+  Each step raises Warden standing; finishing earns the **Warden's Silver Star**. Tracked
+  live in the journal (J), serialized in saves.
+- **Audio & visual polish** — a procedural minor-key **music-box score** (menu + a sparser
+  in-game layer), **footsteps that change by surface** (cobbles, leaves, mud, water, metal,
+  wood), and real **bloom** post-processing (vendored Three.js addons) that makes the
+  pumpkin-glow and witchfire bleed light — with a graceful fallback to plain rendering if
+  a device can't do it.
+
 > **Performance note:** rather than a real light per pumpkin (200+ would crush a
 > forward renderer), every glow is a free emissive sprite and a fixed pool of ~10
 > real point-lights is distance-culled to the nearest glow points each frame.
@@ -185,7 +218,9 @@ Plain ES modules, no bundler. Each system is one file under `src/`:
 | `factions.js` | Six-faction reputation + standings |
 | `bells.js` | Harvest Bells, curse meter, the five endings |
 | `backgrounds.js` | Character creation backgrounds |
+| `warden.js` | Lantern Wardens contract questline |
 | `save.js` | localStorage save/load |
+| `vendor/addons/` | Vendored Three.js postprocessing (bloom) |
 | `audio.js` | Procedural Web Audio engine |
 | `utils.js` | Seeded RNG + shared helpers |
 | `vendor/three.module.js` | Vendored Three.js r161 (so there's no CDN dependency) |

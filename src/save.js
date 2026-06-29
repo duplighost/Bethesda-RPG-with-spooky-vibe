@@ -30,6 +30,7 @@ export class Save {
       inInterior: !!p.interior,
       factions: this.factions ? this.factions.serialize() : null,
       bells: this.bells ? this.bells.serialize() : null,
+      warden: this.warden ? this.warden.serialize() : null,
     };
     try {
       localStorage.setItem(KEY, JSON.stringify(data));
@@ -68,6 +69,7 @@ export class Save {
     }
     if (this.factions && data.factions) this.factions.load(data.factions);
     if (this.bells && data.bells) this.bells.load(data.bells);
+    if (this.warden && data.warden) this.warden.load(data.warden);
     showToast('◈ You step back into a loop already in progress. (loaded)');
     return true;
   }

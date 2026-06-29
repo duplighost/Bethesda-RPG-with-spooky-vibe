@@ -3,7 +3,7 @@
 // every hand-placed Halloween prop. One seamless streaming world.
 // ============================================================
 import * as THREE from 'three';
-import { makeRng, randRange, randInt, pick, clamp, dist2D, TAU } from './utils.js';
+import { makeRng, randRange, randInt, pick, clamp, lerp, dist2D, TAU } from './utils.js';
 
 // Region metadata drives the HUD label, fog tint and ambient wind.
 export const REGIONS = [
@@ -133,6 +133,7 @@ export class World {
         void main(){ float t=clamp((normalize(vP).y+0.15)/0.8,0.0,1.0); gl_FragColor=vec4(mix(bot,top,t),1.0);} `,
     });
     scene.add(new THREE.Mesh(geo, mat));
+    this.skyMat = mat;
 
     // Stars.
     const N = 1400, pos = new Float32Array(N * 3);
@@ -160,7 +161,7 @@ export class World {
       new THREE.MeshBasicMaterial({ color: 0xffe9b0, transparent: true, opacity: 0.12, side: THREE.BackSide })
     );
     halo.position.copy(moon.position); scene.add(halo);
-    this.moon = moon;
+    this.moon = moon; this.moonHalo = halo;
 
     // Lighting: cold moon key + warm low fill so orange/blue contrast pops.
     const moonLight = new THREE.DirectionalLight(0xaec4ff, 0.95);
@@ -173,8 +174,17 @@ export class World {
     scene.add(moonLight); scene.add(moonLight.target);
     this.moonLight = moonLight;
 
-    scene.add(new THREE.HemisphereLight(0x2c3c5c, 0x1a120a, 0.55));
-    scene.add(new THREE.AmbientLight(0x2a3346, 0.45));
+    this.hemi = new THREE.HemisphereLight(0x2c3c5c, 0x1a120a, 0.55); scene.add(this.hemi);
+    this.ambient = new THREE.AmbientLight(0x2a3346, 0.45); scene.add(this.ambient);
+
+    // ---- night-cycle + blood-moon state ----
+    this.timeOfNight = 0.12;     // 0..1 around the eternal night
+    this.danger = 1;             // enemy spawn multiplier
+    this.bloodMoon = false;
+    this._bloodCd = 150;         // first blood moon after a couple of minutes
+    this._bloodT = 0;
+    this._dayLen = 360;          // seconds per night loop
+    this._baseFog = { color: 0x131826, density: 0.0065 };
   }
 
   _terrain() {
@@ -407,6 +417,13 @@ export class World {
     }
     this._scarecrow(44, 40);
     this._scarecrow(-52, -30, true);
+
+    // Candlewick Manor — the Porcelain Count's house, on the wealthy edge
+    this._house(96, -96, 16, 13, 8, 0x2c2630, Math.PI * 0.1);
+    const gate = new THREE.Mesh(new THREE.BoxGeometry(5, 1.2, 0.2),
+      new THREE.MeshStandardMaterial({ color: 0x10100f, metalness: 0.5, roughness: 0.6 }));
+    this.placeOnGround(gate, 96, -88, 5); this.scene.add(gate);
+    this._jackolantern(91, -89, 1.1); this._jackolantern(101, -89, 1.1);
   }
 
   _funeralHome() {
@@ -588,6 +605,7 @@ export class World {
   // ---------------- Per-frame ----------------
   update(dt, playerPos) {
     this._t += dt;
+    this.updateNight(dt);
     this._updateLightPool(dt, playerPos);
     // drift leaf litter with the wind, recycling around the player
     if (this.leaves) {
@@ -603,6 +621,81 @@ export class World {
     // the moon "blinks" rarely
     if (this.moon && Math.sin(this._t * 0.13) > 0.999) this.moon.scale.y = 0.05;
     else if (this.moon) this.moon.scale.y = 1;
+  }
+
+  // ground material under a point — drives footstep timbre
+  surfaceAt(x, z) {
+    if (dist2D(x, z, 0, 0) < 46) return 'stone';        // Gravewick cobbles
+    const reg = this.regionAt(x, z);
+    if (reg.id === 'gallowsfen') {
+      if (dist2D(x, z, reg.x, reg.z) < reg.r * 0.9) return 'water';
+      return 'mud';
+    }
+    if (reg.id === 'mournwood') return 'leaves';
+    if (reg.id === 'ashfall') return 'metal';
+    if (reg.id === 'jackfield' || reg.id === 'thousand') return 'dirt';
+    return 'grass';
+  }
+
+  isBloodMoon() { return this.bloodMoon; }
+  nightPhaseName() {
+    const t = this.timeOfNight;
+    if (this.bloodMoon) return "BLOOD MOON";
+    if (t < 0.18) return 'Dusk';
+    if (t < 0.5) return 'Deep Night';
+    if (t < 0.72) return 'The Witching Hour';
+    return 'False Dawn';
+  }
+
+  // Advance the eternal night; periodically a Blood Moon surges the dark.
+  updateNight(dt) {
+    if (this._interiorMuted) return;   // time holds its breath indoors
+    this.timeOfNight = (this.timeOfNight + dt / this._dayLen) % 1;
+
+    // blood-moon scheduling
+    if (this.bloodMoon) {
+      this._bloodT -= dt;
+      if (this._bloodT <= 0) { this.bloodMoon = false; this._bloodCd = 160 + this.rng() * 120; if (this.onBloodMoon) this.onBloodMoon(false); }
+    } else {
+      this._bloodCd -= dt;
+      if (this._bloodCd <= 0) { this.bloodMoon = true; this._bloodT = 32; if (this.onBloodMoon) this.onBloodMoon(true); }
+    }
+
+    // smooth blood factor for visuals
+    this._blood = lerp(this._blood ?? 0, this.bloodMoon ? 1 : 0, 1 - Math.pow(0.06, dt));
+    const b = this._blood;
+    this.danger = 1 + b * 1.4;
+
+    // moon colour & arc — drifts across the sky over the night
+    const ang = this.timeOfNight * TAU;
+    const mx = Math.cos(ang) * 760, my = 200 + Math.sin(ang) * 320, mz = -700;
+    if (this.moon) {
+      this.moon.position.set(mx, Math.max(120, my), mz);
+      this.moonHalo.position.copy(this.moon.position);
+      this.moon.material.color.setRGB(lerp(0.96, 0.85, b), lerp(0.89, 0.13, b), lerp(0.69, 0.10, b));
+      this.moonHalo.material.color.copy(this.moon.material.color);
+      this.moonHalo.material.opacity = 0.12 + b * 0.25;
+    }
+    // moonlight follows the moon; reddens & brightens at blood moon
+    if (this.moonLight) {
+      this.moonLight.position.set(mx, Math.max(120, my), mz);
+      this.moonLight.target.position.set(0, 0, 0);
+      this.moonLight.color.setRGB(lerp(0.68, 1.0, b), lerp(0.77, 0.32, b), lerp(1.0, 0.28, b));
+      // dimmer at false dawn, brighter at blood moon
+      const dawnDim = this.timeOfNight > 0.72 ? 0.7 : 1;
+      this.moonLight.intensity = (0.95 * dawnDim) + b * 0.5;
+    }
+    if (this.hemi) this.hemi.intensity = 0.55 + b * 0.25;
+    // sky + fog tint
+    if (this.skyMat) {
+      this.skyMat.uniforms.bot.value.setRGB(lerp(0.14, 0.32, b), lerp(0.10, 0.03, b), lerp(0.18, 0.05, b));
+    }
+    // only override fog while the blood moon is bleeding in, so per-region
+    // fog tints (set on region change) survive ordinary nights
+    if (this.scene.fog && b > 0.02) {
+      const f = this.scene.fog.color;
+      f.setRGB(lerp(f.r, 0.20, b * 0.6), lerp(f.g, 0.03, b * 0.6), lerp(f.b, 0.05, b * 0.6));
+    }
   }
 
   // Assign the fixed light pool to the nearest glow points, so cost stays

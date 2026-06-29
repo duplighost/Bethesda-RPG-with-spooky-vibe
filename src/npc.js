@@ -115,6 +115,8 @@ export class NPCs {
     if (this.onDialogueOpen) this.onDialogueOpen();
   }
 
+  panic(on) { this.panicked = on; }
+
   recruit(npc) {
     npc.recruited = true;
     this.companion = npc;
@@ -203,12 +205,15 @@ export class NPCs {
       if (d < 5) {
         n.group.rotation.y = Math.atan2(p.x - n.group.position.x, p.z - n.group.position.z);
       } else {
+        // during a blood moon, scurry straight home; otherwise idle-wander
         const a = n.wt * 0.4;
-        const tx = n.homeX + Math.cos(a) * 2.5, tz = n.homeZ + Math.sin(a) * 2.5;
+        const tx = this.panicked ? n.homeX : n.homeX + Math.cos(a) * 2.5;
+        const tz = this.panicked ? n.homeZ : n.homeZ + Math.sin(a) * 2.5;
         const dx = tx - n.group.position.x, dz = tz - n.group.position.z;
         const dd = Math.hypot(dx, dz) || 1;
-        n.group.position.x += (dx / dd) * dt * 0.7;
-        n.group.position.z += (dz / dd) * dt * 0.7;
+        const sp = (this.panicked ? 2.6 : 0.7) * dt;
+        n.group.position.x += (dx / dd) * sp;
+        n.group.position.z += (dz / dd) * sp;
         n.group.rotation.y = Math.atan2(dx, dz);
       }
       n.group.position.y = this.world.getHeight(n.group.position.x, n.group.position.z) +
@@ -316,8 +321,11 @@ const MARA = {
     options: (c, pl) => [
       { label: 'Who are the Lantern Wardens?', goto: 'wardens' },
       { label: 'You hunt these things alone?', goto: 'brother' },
-      { label: 'Watch my back out there. Come with me.', goto: 'recruit',
-        hide: () => false },
+      { label: 'Give me a contract. I’ll earn the star.', goto: 'contract',
+        hide: (c) => c.npcs.wardenRef && c.npcs.wardenRef.started },
+      { label: 'How goes my contract?', goto: 'contractstatus',
+        hide: (c) => !(c.npcs.wardenRef && c.npcs.wardenRef.started) },
+      { label: 'Watch my back out there. Come with me.', goto: 'recruit' },
       { label: '(Leave.)', end: true },
     ],
   },
@@ -343,5 +351,20 @@ const MARA = {
       { label: 'Deal.', action: (c) => c.npcs.recruit(c.npc), end: true },
       { label: 'On second thought…', goto: 'start' },
     ],
+  },
+  contract: {
+    speaker: 'Mara Vale',
+    text: "The chapter's down to me and a tin star nobody's filled. Want it? Then do the work nobody thanks you for. Thin the herd, lay the dead to rest, put down the things wearing people, and silence a bell the clean way. Do that, and the star's yours.",
+    options: [
+      { label: 'Hand me the contract.', action: (c) => c.npcs.wardenRef.start(), end: true },
+      { label: 'Maybe later.', goto: 'start' },
+    ],
+  },
+  contractstatus: {
+    speaker: 'Mara Vale',
+    text: (c) => c.npcs.wardenRef.complete
+      ? "You wear the star like you were born to the cold. Good. Hallow County could use one more thing that hunts back."
+      : "Still owe the chapter blood and bells. Current order: " + (c.npcs.wardenRef.cur()?.desc || '—'),
+    options: [{ label: '(Nod.)', goto: 'start' }],
   },
 };

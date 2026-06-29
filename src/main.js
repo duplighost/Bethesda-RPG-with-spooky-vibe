@@ -18,6 +18,7 @@ import { Save } from './save.js';
 import { Factions, FACTIONS } from './factions.js';
 import { Bells, ENDINGS } from './bells.js';
 import { BACKGROUNDS } from './backgrounds.js';
+import { Warden } from './warden.js';
 import { clamp, dist2D, TAU, showToast } from './utils.js';
 
 // ---------- Renderer / Scene / Camera ----------
@@ -34,10 +35,33 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 1600);
 scene.add(camera);
 
+// ---- optional bloom post-processing (degrades gracefully) ----
+let composer = null, bloomPass = null;
+(async () => {
+  try {
+    const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
+      import('three/addons/postprocessing/EffectComposer.js'),
+      import('three/addons/postprocessing/RenderPass.js'),
+      import('three/addons/postprocessing/UnrealBloomPass.js'),
+      import('three/addons/postprocessing/OutputPass.js'),
+    ]);
+    const c = new EffectComposer(renderer);
+    c.addPass(new RenderPass(scene, camera));
+    bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.62, 0.5, 0.84);
+    c.addPass(bloomPass);
+    c.addPass(new OutputPass());
+    c.setSize(innerWidth, innerHeight);
+    composer = c;
+  } catch (e) {
+    composer = null;  // fall back to plain rendering — game unaffected
+  }
+})();
+
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  if (composer) composer.setSize(innerWidth, innerHeight);
 });
 
 // ---------- Systems ----------
@@ -54,17 +78,34 @@ const npcs = new NPCs(scene, world, player, audio, dialogue, enemies, quests);
 const interiors = new Interiors(scene, world, player, enemies, audio, dialogue, npcs);
 const events = new Events(scene, world, player, audio, dialogue, enemies);
 const bells = new Bells(scene, world, player, audio, dialogue, factions, quests);
+const warden = new Warden(player, factions, quests);
 const save = new Save(player, quests, npcs, weapons);
 
 player.weaponsRef = weapons;
 enemies.factions = factions;
+enemies.warden = warden;
 npcs.factions = factions;
+npcs.wardenRef = warden;
 quests.bellsRef = bells;
+bells.onSilence = () => warden.onBellSilenced();
 save.factions = factions;
 save.bells = bells;
+save.warden = warden;
 enemies.onBossDefeated = () => { quests.onBossDefeated(); bells.onMarrowJack(); };
 enemies.onEngineDefeated = () => bells.setEngineDead();
 bells.onEnding = (ending) => showEnding(ending);
+world.onBloodMoon = (on) => {
+  const ban = document.getElementById('bloodmoon-banner');
+  if (on) {
+    ban.classList.add('show'); audio.bossRoar(); setTimeout(() => audio.bell(110), 600);
+    setTimeout(() => ban.classList.remove('show'), 4200);
+    player.addDread(20); showToast('Lock your doors. Hallow County is hunting tonight.');
+    npcs.panic(true);
+  } else {
+    ban.classList.remove('show'); showToast('The blood moon sets. The dark settles — for now.');
+    npcs.panic(false);
+  }
+};
 save.onForceExitInterior = () => { if (interiors.active) { player.interior = null; interiors.active = null; enemies.suspended = false; scene.fog.density = 0.0065; world.setInteriorMuted(false); } };
 
 // re-capture the mouse after any overlay closes
@@ -261,6 +302,9 @@ function toggleJournal() {
 function renderJournal() {
   document.getElementById('j-objective').textContent = quests.steps[quests.step].text;
 
+  const wardenBox = document.getElementById('j-warden');
+  if (wardenBox) wardenBox.innerHTML = warden.journalLines().map(l => `<div class="j-bell">${l}</div>`).join('');
+
   const bellsBox = document.getElementById('j-bells');
   const dispLabel = { silence: 'Silenced', bind: 'Bound', give_church: 'Given · Church', give_court: 'Given · Court', feed: 'Fed to October' };
   bellsBox.innerHTML = bells.list.map(b => {
@@ -330,7 +374,11 @@ function updateHUD(dt) {
   clockMin += dt * 0.2;
   let hr = Math.floor(clockMin / 60) % 24, mn = Math.floor(clockMin % 60);
   const ampm = hr >= 12 ? 'PM' : 'AM'; let h12 = hr % 12; if (h12 === 0) h12 = 12;
-  document.getElementById('clock').textContent = `${h12}:${String(mn).padStart(2, '0')} ${ampm} · Hallow's Eve`;
+  const clockEl = document.getElementById('clock');
+  clockEl.textContent = `${h12}:${String(mn).padStart(2, '0')} ${ampm} · ${world.nightPhaseName()}`;
+  clockEl.style.color = world.isBloodMoon() ? '#e23b2a' : '';
+  // smooth blood-moon vignette
+  document.getElementById('bloodmoon-overlay').style.opacity = (world._blood || 0).toFixed(2);
 
   renderSpellbar();
 
@@ -405,8 +453,16 @@ function renderBackgroundCards() {
   });
 }
 
+// menu music starts on the first interaction with the intro (audio needs a gesture)
+let introAudioOn = false;
+document.getElementById('intro').addEventListener('pointerdown', () => {
+  if (introAudioOn) return; introAudioOn = true;
+  audio.init(); audio.startMusic('menu');
+});
+
 function beginGame(loadSave) {
   audio.init();
+  audio.stopMusic(); setTimeout(() => audio.startMusic('game'), 700);
   document.getElementById('intro').classList.add('hidden');
   document.getElementById('hud').classList.remove('hidden');
   player.spawnAt(world.funeralHome.x, world.funeralHome.z + 9, Math.PI);
@@ -434,10 +490,22 @@ document.getElementById('respawn').addEventListener('click', () => {
 
 // ---------- Loop ----------
 const clock = new THREE.Clock();
+function renderFrame() {
+  if (composer) {
+    try {
+      bloomPass.strength = 0.62 + (world._blood || 0) * 0.55;
+      composer.render();
+      return;
+    } catch (e) {
+      composer = null;   // a runtime GL failure → permanently fall back, never break the loop
+    }
+  }
+  renderer.render(scene, camera);
+}
 function loop() {
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, clock.getDelta());
-  if (!started) { renderer.render(scene, camera); return; }
+  if (!started) { renderFrame(); return; }
 
   const blocked = uiBlocking();
   if (!blocked) {
@@ -459,8 +527,8 @@ function loop() {
 
   updateHUD(dt);
   if (mapOpen) drawMap();
-  renderer.render(scene, camera);
+  renderFrame();
 }
 loop();
 
-window.HALLOWIND = { scene, world, player, enemies, weapons, quests, npcs, interiors, events, save, dialogue, factions, bells };
+window.HALLOWIND = { scene, world, player, enemies, weapons, quests, npcs, interiors, events, save, dialogue, factions, bells, warden };

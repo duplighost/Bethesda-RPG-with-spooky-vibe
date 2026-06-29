@@ -29,6 +29,7 @@ export class Interiors {
       { x: -70, z: 70, r: 3.5, id: 'bellweather', label: 'enter · The Bellweather House' },
       { x: -300, z: 180, r: 3.5, id: 'grinhut', label: "enter · Old Mother Grin's Hut" },
       { x: -360, z: -240, r: 4, id: 'toyworks', label: 'enter · Harrow & Sons Toyworks' },
+      { x: 96, z: -89, r: 4, id: 'candlemanor', label: 'enter · Candlewick Manor' },
     ];
     // align door triggers to the actual doorway (front wall, world space)
     this._placeDoors();
@@ -126,6 +127,7 @@ export class Interiors {
     const base = { x: 6000 + Object.keys(this.built).length * 400, z: 6000 };
     const cell = id === 'bellweather' ? this._bellweather(base)
       : id === 'toyworks' ? this._toyworks(base)
+      : id === 'candlemanor' ? this._candlemanor(base)
       : this._grinhut(base);
     this.built[id] = cell;
     return cell;
@@ -418,6 +420,56 @@ The line runs three shifts. Mother runs all three.`);
         cell.mother = m;
         this.audio.bossRoar();
       }, 1200);
+    };
+    return cell;
+  }
+
+  // ---------------- Candlewick Manor (Porcelain Count) ----------------
+  _candlemanor(base) {
+    const W = 24, D = 20, H = 6;
+    const { group, colliders } = this._room(base, W, D, H, 0x0c0810);
+    const cell = { id: 'candlemanor', name: 'CANDLEWICK MANOR', group, colliders,
+      floorY: 0, min: { x: base.x - W / 2 + 1, z: base.z - D / 2 + 1 }, max: { x: base.x + W / 2 - 1, z: base.z + D / 2 - 1 },
+      spawn: { x: base.x, z: base.z + D / 2 - 2, yaw: Math.PI }, interactables: [], cleared: false };
+
+    // a grand ballroom: chandelier glows + a long carpet
+    for (const cx of [-6, 0, 6]) {
+      this._interiorLight(group, base.x + cx, base.z, 0xffd9a0, 0.9, 12);
+      const chand = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.world._glowTex, color: 0xffd9a0, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
+      chand.scale.setScalar(2.4); chand.position.set(base.x + cx, H - 1, base.z); group.add(chand);
+    }
+    const carpet = new THREE.Mesh(new THREE.BoxGeometry(4, 0.05, D - 2),
+      new THREE.MeshStandardMaterial({ color: 0x4a0d18, roughness: 1 }));
+    carpet.position.set(base.x, 0.03, base.z); group.add(carpet);
+    // portraits along one wall (emissive faces that "watch")
+    for (let i = 0; i < 5; i++) {
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.5, 0.1),
+        new THREE.MeshStandardMaterial({ color: 0x1a140e }));
+      frame.position.set(base.x - 8 + i * 4, 3, base.z - D / 2 + 0.3); group.add(frame);
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 1.0),
+        new THREE.MeshBasicMaterial({ color: 0xb06adf, transparent: true, opacity: 0.35 }));
+      face.position.set(base.x - 8 + i * 4, 3, base.z - D / 2 + 0.36); group.add(face);
+    }
+
+    this._note(cell, base.x - 8, base.z + 5, 'A Calling Card, Embossed',
+`The Count receives at midnight and at midnight only.
+He has been thirty-nine years old for one hundred and ten years.
+The porcelain is not a mask. The porcelain is what is left
+when you replace a man, piece by piece, with the price of staying.
+Do not accept the wine. Do not compliment the portraits.
+Do not, under any roof of his, stop moving.`);
+
+    this._exitObject(cell, base.x, base.z + D / 2 - 1.2);
+
+    cell.onEnter = () => {
+      if (cell.cleared || cell.boss) return;
+      whisper('the doors lock behind you with a sound like applause');
+      setTimeout(() => {
+        const c = this.enemies.spawnPorcelainCount(base.x, base.z - 4);
+        c.onDeath = () => { cell.cleared = true; cell.boss = null; };
+        this.enemies.onCountDefeated = () => { whisper('the manor is yours, if you want a house that remembers being a man'); };
+        cell.boss = c;
+      }, 1000);
     };
     return cell;
   }

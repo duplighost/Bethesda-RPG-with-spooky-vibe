@@ -186,7 +186,11 @@ export class Player {
     // footstep audio
     if (moving && this.onGround) {
       this._stepT -= dt * (sprint ? 1.6 : 1.0);
-      if (this._stepT <= 0) { this._stepT = 0.42; this.audio.thud(70 + Math.random()*20); }
+      if (this._stepT <= 0) {
+        this._stepT = 0.42;
+        const surf = this.interior ? 'wood' : this.world.surfaceAt(this.pos.x, this.pos.z);
+        this.audio.footstep(surf);
+      }
     }
 
     // view bob
