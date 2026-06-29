@@ -4,7 +4,7 @@
 // quest-flag objects. Press E when the prompt shows.
 // ============================================================
 import * as THREE from 'three';
-import { dist2D, showToast, whisper } from './utils.js';
+import { dist2D, clamp, showToast, whisper } from './utils.js';
 
 // Hand-written notes scattered across the county. Each is a tiny tragedy.
 export const NOTES = [
@@ -142,10 +142,18 @@ export class Items {
     glow.scale.setScalar(1.6); glow.position.y = 0.35; grp.add(glow);
     this.world.placeOnGround(grp, l.x, l.z, 1.0);
     this.scene.add(grp);
-    this.interactables.push({
+    const entry = {
       pos: grp.position, label: 'take', radius: 2.8, kind: 'loot', data: l, obj: grp, mesh, used: false,
-      bob: Math.random() * 6,
-    });
+      bob: Math.random() * 6, relic: !!l.relic, glow,
+    };
+    // Relics get a faint vertical glint that only kindles as the player draws
+    // near — a findable-without-a-guide cue, not a quest marker.
+    if (l.relic) {
+      const glint = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.world._glowTex, color: l.icon, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+      glint.scale.setScalar(0.5); glint.position.y = 1.1; grp.add(glint);
+      entry.glint = glint;
+    }
+    this.interactables.push(entry);
   }
 
   // returns the nearest usable interactable in range as {pos, prompt, run}
@@ -241,11 +249,29 @@ export class Items {
   }
 
   update(dt) {
+    const pp = this.player.pos;
     for (const it of this.interactables) {
       if (it.used && it.kind === 'loot') continue;
       it.bob += dt;
       it.obj.position.y = this.world.getHeight(it.pos.x, it.pos.z) + (it.kind === 'loot' ? 1.0 : 0.9) + Math.sin(it.bob * 2) * 0.12;
       if (it.mesh) it.mesh.rotation.y += dt * 1.5;
+
+      // proximity glint for relics: faint glimmer far off, a gentle pulse up close
+      if (it.relic) {
+        const d = dist2D(pp.x, pp.z, it.pos.x, it.pos.z);
+        const near = clamp(1 - d / 46, 0, 1);           // 1 at touch → 0 by ~46 units
+        const pulse = 0.78 + 0.22 * Math.sin(it.bob * 3);
+        if (it.glow) {
+          it.glow.material.opacity = (0.14 + near * 0.72) * pulse;
+          it.glow.scale.setScalar(1.5 + near * 1.1);
+        }
+        if (it.glint) {
+          it.glint.material.opacity = near * near * 0.6 * pulse;   // a rising shimmer, only when close
+          it.glint.scale.setScalar(0.4 + near * 0.7);
+          it.glint.position.y = 1.0 + Math.sin(it.bob * 2.2) * 0.3 + near * 0.6;
+        }
+        if (it.mesh && it.mesh.material) it.mesh.material.emissiveIntensity = 0.45 + near * 0.9;
+      }
     }
   }
 }
