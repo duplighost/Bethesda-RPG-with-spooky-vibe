@@ -42,6 +42,24 @@ export class World {
     const t = new THREE.CanvasTexture(c); return t;
   }
 
+  // soft cloudy texture for drifting ground mist
+  _makeMistTexture() {
+    const s = 256, c = document.createElement('canvas'); c.width = c.height = s;
+    const g = c.getContext('2d');
+    g.fillStyle = 'rgba(0,0,0,0)'; g.fillRect(0, 0, s, s);
+    for (let i = 0; i < 60; i++) {
+      const x = this.rng() * s, y = this.rng() * s, r = 20 + this.rng() * 70;
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      const a = 0.05 + this.rng() * 0.08;
+      grd.addColorStop(0, `rgba(150,170,200,${a})`);
+      grd.addColorStop(1, 'rgba(150,170,200,0)');
+      g.fillStyle = grd; g.fillRect(0, 0, s, s);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
+  }
+
   // register a cheap glow: emissive sprite halo + candidacy for the light pool
   _addGlow(x, y, z, color = 0xff7a1e, base = 1.0, opts = {}) {
     const spr = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -104,6 +122,7 @@ export class World {
     this._buildLightPool();
     this._terrain();
     this._water();
+    this._atmosphere();
     this._gravewick();
     this._funeralHome();
     this._bellweatherHouse();
@@ -209,7 +228,7 @@ export class World {
     }
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 });
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0.0, envMapIntensity: 0.5 });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     this.scene.add(mesh);
@@ -239,6 +258,41 @@ export class World {
     this.waterMesh = mesh;
   }
 
+  // drifting fog banks + rising embers for depth and mood
+  _atmosphere() {
+    this.mistTex = this._makeMistTexture();
+    this.mistSprites = [];
+    for (let i = 0; i < 46; i++) {
+      const reg = pick(this.rng, REGIONS);
+      const a = this.rng() * TAU, r = Math.sqrt(this.rng()) * reg.r;
+      const x = reg.x + Math.cos(a) * r, z = reg.z + Math.sin(a) * r;
+      const dense = (reg.id === 'gallowsfen' || reg.id === 'mournwood' || reg.id === 'thousand');
+      const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: this.mistTex, color: 0x9fb0c8, transparent: true,
+        opacity: dense ? 0.3 : 0.16, depthWrite: false,
+      }));
+      const sc = randRange(this.rng, 12, 24);
+      spr.scale.set(sc, sc * 0.5, 1);
+      spr.position.set(x, this.getHeight(x, z) + randRange(this.rng, 1.4, 3.4), z);
+      this.scene.add(spr);
+      this.mistSprites.push({ spr, x, z, baseY: spr.position.y, ph: this.rng() * TAU, amp: randRange(this.rng, 1, 3) });
+    }
+    // rising ember motes
+    const EN = 240, ep = new Float32Array(EN * 3);
+    for (let i = 0; i < EN; i++) {
+      const a = this.rng() * TAU, r = this.rng() * 130;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      ep[i * 3] = x; ep[i * 3 + 1] = this.getHeight(x, z) + this.rng() * 7 + 0.5; ep[i * 3 + 2] = z;
+    }
+    const eg = new THREE.BufferGeometry();
+    eg.setAttribute('position', new THREE.BufferAttribute(ep, 3));
+    this.embers = new THREE.Points(eg, new THREE.PointsMaterial({
+      map: this._glowTex, color: 0xffae5a, size: 0.5, transparent: true, opacity: 0.7,
+      blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+    }));
+    this.scene.add(this.embers);
+  }
+
   // ---------------- Reusable prop builders ----------------
   placeOnGround(obj, x, z, yOff = 0) {
     obj.position.set(x, this.getHeight(x, z) + yOff, z);
@@ -251,10 +305,10 @@ export class World {
   _jackolantern(x, z, scale = 1) {
     const grp = new THREE.Group();
     const body = new THREE.Mesh(
-      new THREE.SphereGeometry(0.55 * scale, 12, 10),
-      new THREE.MeshStandardMaterial({ color: 0xd2691e, roughness: 0.7, emissive: 0x301000, emissiveIntensity: 0.4 })
+      new THREE.SphereGeometry(0.55 * scale, 16, 12),
+      new THREE.MeshStandardMaterial({ color: 0xd2691e, roughness: 0.5, metalness: 0.05, emissive: 0x4a1c00, emissiveIntensity: 0.6, envMapIntensity: 0.8 })
     );
-    body.scale.y = 0.8; body.castShadow = true; grp.add(body);
+    body.scale.y = 0.82; body.castShadow = true; grp.add(body);
     const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.09, 0.25), new THREE.MeshStandardMaterial({ color: 0x3c5a1e }));
     stem.position.y = 0.5 * scale; grp.add(stem);
     // glowing carved face (emissive planes)
@@ -618,6 +672,28 @@ export class World {
       }
       p.needsUpdate = true;
     }
+    // drifting mist banks (gentle bob + slow horizontal sway)
+    if (this.mistSprites) {
+      for (const m of this.mistSprites) {
+        m.ph += dt * 0.25;
+        m.spr.position.y = m.baseY + Math.sin(m.ph) * m.amp * 0.4;
+        m.spr.position.x = m.x + Math.cos(m.ph * 0.5) * 3;
+      }
+    }
+    // rising, recycling embers near the player
+    if (this.embers) {
+      const p = this.embers.geometry.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        let x = p.getX(i) + dt * 0.6, y = p.getY(i) + dt * (0.5 + (i % 5) * 0.15), z = p.getZ(i);
+        if (y > this.getHeight(x, z) + 11 || dist2D(x, z, playerPos.x, playerPos.z) > 120) {
+          x = playerPos.x + (this.rng() - 0.5) * 90; z = playerPos.z + (this.rng() - 0.5) * 90;
+          y = this.getHeight(x, z) + this.rng() * 2;
+        }
+        p.setXYZ(i, x, y, z);
+      }
+      p.needsUpdate = true;
+    }
+
     // the moon "blinks" rarely
     if (this.moon && Math.sin(this._t * 0.13) > 0.999) this.moon.scale.y = 0.05;
     else if (this.moon) this.moon.scale.y = 1;

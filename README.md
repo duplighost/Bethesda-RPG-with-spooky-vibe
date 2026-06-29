@@ -204,6 +204,18 @@ cast, lantern, flare, reload, jump, crouch, interact, and the satchel.
 - **Mobile / touch controls** — full on-screen joystick + look + action buttons that
   appear automatically on touch devices.
 
+### …and a graphics pass
+
+- **Image-based lighting** — a procedural night env map (`scene.environment`) so every
+  PBR surface gets real reflections and dimensional shading instead of flat matte:
+  metals gleam, the bell and revolver catch the moon, the ground takes a faint wet sheen.
+- **Cinematic post-grade** — on top of bloom, a final shader pass adds a teal-shadow /
+  warm-highlight colour grade, a gentle contrast curve, a vignette, fine film grain, and
+  subtle chromatic aberration (and a red push during a blood moon). All degrade gracefully
+  to plain rendering if a device can't run the composer.
+- **Atmosphere** — drifting fog banks and rising ember motes for depth, glossier glowing
+  pumpkins, and richer materials throughout.
+
 > **On painted backdrops:** another build composites pre-rendered region paintings
 > behind its 3D, which looks great in a still. I deliberately *didn't* copy that —
 > a fixed painting behind a live, walkable 3D world reads as a pasted-on billboard the

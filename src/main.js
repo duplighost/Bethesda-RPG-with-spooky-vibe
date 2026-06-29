@@ -38,21 +38,78 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.05, 1600);
 scene.add(camera);
 
-// ---- optional bloom post-processing (degrades gracefully) ----
-let composer = null, bloomPass = null;
+// ---- procedural image-based lighting: gives every PBR surface real
+//      reflections + dimensional shading (huge step up from flat matte).
+//      Fully guarded so it never breaks construction or the test harness. ----
+(function setupIBL() {
+  try {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const envScene = new THREE.Scene();
+    const dome = new THREE.SphereGeometry(40, 24, 16);
+    const cols = [], p = dome.attributes.position;
+    const top = new THREE.Color(0x0a1230), bot = new THREE.Color(0x2a1c30);
+    for (let i = 0; i < p.count; i++) {
+      const t = Math.max(0, Math.min(1, p.getY(i) / 40 * 0.5 + 0.5));
+      const c = bot.clone().lerp(top, t); cols.push(c.r, c.g, c.b);
+    }
+    dome.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+    envScene.add(new THREE.Mesh(dome, new THREE.MeshBasicMaterial({ side: THREE.BackSide, vertexColors: true })));
+    const moon = new THREE.Mesh(new THREE.SphereGeometry(5, 16, 16), new THREE.MeshBasicMaterial({ color: 0x9fb6ff }));
+    moon.position.set(-18, 15, -22); envScene.add(moon);
+    const warm = new THREE.Mesh(new THREE.SphereGeometry(4, 16, 16), new THREE.MeshBasicMaterial({ color: 0xff8a30 }));
+    warm.position.set(13, -5, 11); envScene.add(warm);
+    scene.environment = pmrem.fromScene(envScene, 0.06).texture;
+    pmrem.dispose();
+  } catch (e) { /* IBL is optional polish */ }
+})();
+
+// ---- cinematic colour-grade / vignette / grain / chromatic-aberration ----
+const GradeShader = {
+  uniforms: {
+    tDiffuse: { value: null }, uTime: { value: 0 }, uBlood: { value: 0 },
+    uVignette: { value: 0.85 }, uGrain: { value: 0.05 }, uAber: { value: 0.0016 },
+  },
+  vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float uTime,uBlood,uVignette,uGrain,uAber; varying vec2 vUv;
+    float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+    void main(){
+      vec2 d = vUv-0.5;
+      float ca = uAber*(dot(d,d)*2.2);
+      vec3 col;
+      col.r = texture2D(tDiffuse, vUv + d*ca).r;
+      col.g = texture2D(tDiffuse, vUv).g;
+      col.b = texture2D(tDiffuse, vUv - d*ca).b;
+      float lum = dot(col, vec3(0.299,0.587,0.114));
+      // teal shadows, warm highlights (autumn-gothic grade)
+      col += vec3(0.03,0.06,0.11)*(1.0-lum) + vec3(0.10,0.045,0.0)*lum;
+      col = clamp((col-0.5)*1.13+0.5, 0.0, 1.0);   // gentle contrast
+      col.r += uBlood*0.12*(1.0-lum); col.gb -= uBlood*0.045;  // blood-moon
+      float vig = smoothstep(1.15, 0.30, length(d)*1.45);
+      col *= mix(1.0, vig, uVignette);
+      col += (hash(vUv*vec2(1280.0,720.0)+fract(uTime))-0.5)*uGrain;
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+};
+
+// ---- optional bloom + grade post-processing (degrades gracefully) ----
+let composer = null, bloomPass = null, gradePass = null;
 (async () => {
   try {
-    const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] = await Promise.all([
+    const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }, { ShaderPass }] = await Promise.all([
       import('three/addons/postprocessing/EffectComposer.js'),
       import('three/addons/postprocessing/RenderPass.js'),
       import('three/addons/postprocessing/UnrealBloomPass.js'),
       import('three/addons/postprocessing/OutputPass.js'),
+      import('three/addons/postprocessing/ShaderPass.js'),
     ]);
     const c = new EffectComposer(renderer);
     c.addPass(new RenderPass(scene, camera));
     bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.62, 0.5, 0.84);
     c.addPass(bloomPass);
     c.addPass(new OutputPass());
+    gradePass = new ShaderPass(GradeShader);
+    c.addPass(gradePass);
     c.setSize(innerWidth, innerHeight);
     composer = c;
   } catch (e) {
@@ -579,10 +636,16 @@ document.getElementById('respawn').addEventListener('click', () => {
 
 // ---------- Loop ----------
 const clock = new THREE.Clock();
+let _gradeT = 0;
 function renderFrame() {
   if (composer) {
     try {
       bloomPass.strength = 0.62 + (world._blood || 0) * 0.55;
+      if (gradePass) {
+        _gradeT += 0.016;
+        gradePass.uniforms.uTime.value = _gradeT;
+        gradePass.uniforms.uBlood.value = world._blood || 0;
+      }
       composer.render();
       return;
     } catch (e) {
